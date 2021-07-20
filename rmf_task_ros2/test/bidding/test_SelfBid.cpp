@@ -59,10 +59,8 @@ SCENARIO("Auction with 2 Bids", "[TwoBids]")
   std::string r_result_winner = "";
 
   // Creating 1 auctioneer and 1 bidder
-  const auto rcl_context = std::make_shared<rclcpp::Context>();
-  rcl_context->init(0, nullptr);
-  const auto node = rclcpp::Node::make_shared(
-    "test_selfbidding", rclcpp::NodeOptions().context(rcl_context));
+  rclcpp::init(0, nullptr);
+  auto node = rclcpp::Node::make_shared("test_selfbidding");
 
   auto auctioneer = Auctioneer::make(
     node,
@@ -78,9 +76,7 @@ SCENARIO("Auction with 2 Bids", "[TwoBids]")
     }
   );
 
-  rclcpp::ExecutorOptions exec_options;
-  exec_options.context = rcl_context;
-  rclcpp::executors::SingleThreadedExecutor executor(exec_options);
+  rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
 
   auto bidder1 = MinimalBidder::make(
@@ -153,7 +149,7 @@ SCENARIO("Auction with 2 Bids", "[TwoBids]")
     REQUIRE(r_result_id == "bid2");
   }
 
-  rclcpp::shutdown(rcl_context);
+  rclcpp::shutdown();
 }
 
 } // namespace bidding
