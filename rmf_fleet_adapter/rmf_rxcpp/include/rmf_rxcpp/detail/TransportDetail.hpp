@@ -28,8 +28,7 @@ class SubscriptionWrapper
 {
 public:
 
-  SubscriptionWrapper(rclcpp::Node::WeakPtr node, std::string topic_name,
-    const rclcpp::QoS& qos)
+  SubscriptionWrapper(rclcpp::Node::WeakPtr node, std::string topic_name, const rclcpp::QoS& qos)
   : _node{std::move(node)}, _topic_name{std::move(topic_name)}, _qos{qos}
   {
     // no op
@@ -53,7 +52,6 @@ public:
       s.on_completed();
     }
   }
-
 private:
 
   rclcpp::Node::WeakPtr _node;
