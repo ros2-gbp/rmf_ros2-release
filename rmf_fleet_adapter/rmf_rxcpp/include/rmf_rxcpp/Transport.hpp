@@ -27,8 +27,8 @@
 namespace rmf_rxcpp {
 
 class RxCppExecutor :
-  public rclcpp::Executor,
-  public std::enable_shared_from_this<RxCppExecutor>
+    public rclcpp::Executor,
+    public std::enable_shared_from_this<RxCppExecutor>
 {
 public:
   RxCppExecutor(
@@ -36,8 +36,8 @@ public:
     const rclcpp::ExecutorOptions& options = rclcpp::ExecutorOptions())
   : rclcpp::Executor{options},
     _worker{std::move(worker)},
-    _started{false},
     _stopping{false},
+    _stopped{true},
     _work_scheduled{false}
   {
     // Do nothing
@@ -45,36 +45,30 @@ public:
 
   void spin() override
   {
-    {
-      std::unique_lock<std::mutex> lock(_starting_mutex);
-      _stopping = false;
-      _started = true;
-    }
-
-    _started_cv.notify_all();
-
+    _stopping = false;
+    _stopped = false;
     const auto keep_spinning = [&]()
-      {
-        return !_stopping && rclcpp::ok(context_);
-      };
+    {
+      return !_stopping && rclcpp::ok(context_);
+    };
 
     while (keep_spinning())
     {
       _work_scheduled = true;
       _worker.schedule([w = weak_from_this()](const auto&)
+      {
+        if (const auto& self = w.lock())
         {
-          if (const auto& self = w.lock())
+          self->spin_some();
+
           {
-            self->spin_some();
-
-            {
-              std::lock_guard<std::mutex> lock(self->_mutex);
-              self->_work_scheduled = false;
-            }
-
-            self->_cv.notify_all();
+            std::lock_guard<std::mutex> lock(self->_mutex);
+            self->_work_scheduled = false;
           }
-        });
+
+          self->_cv.notify_all();
+        }
+      });
 
       {
         std::unique_lock<std::mutex> lock(_mutex);
@@ -84,9 +78,9 @@ public:
           // longer any work scheduled (or if we're no longer supposed to keep
           // spinning).
           _cv.wait_for(lock, std::chrono::milliseconds(50), [&]()
-            {
-              return !_work_scheduled || !keep_spinning();
-            });
+          {
+            return !_work_scheduled || !keep_spinning();
+          });
         }
       }
 
@@ -98,8 +92,8 @@ public:
         wait_for_work(std::chrono::milliseconds(50));
     }
 
-    _started = false;
-    _stopping = false;
+    _stopped = true;
+    _stopped_cv.notify_all();
   }
 
   void stop()
@@ -108,66 +102,25 @@ public:
     _cv.notify_all();
   }
 
-  void wait_until_started()
+  std::condition_variable& stopped_cv()
   {
-    while (!_started)
-    {
-      std::unique_lock<std::mutex> lock(_starting_mutex);
-      _started_cv.wait(lock, [&]() { return _started; });
-    }
+    return _stopped_cv;
+  }
+
+  bool stopped() const
+  {
+    return _stopped;
   }
 
 private:
   rxcpp::schedulers::worker _worker;
-
-
-  bool _started;
-  std::mutex _starting_mutex;
-  std::condition_variable _started_cv;
-
   bool _stopping;
+  bool _stopped;
+  std::condition_variable _stopped_cv;
 
   bool _work_scheduled;
   std::mutex _mutex;
   std::condition_variable _cv;
-};
-
-template<typename Message>
-class SubscriptionBridge
-{
-public:
-
-  SubscriptionBridge(
-    rclcpp::Node::SharedPtr node,
-    const std::string& topic_name,
-    const rclcpp::QoS& qos)
-  {
-    _subscription = node->create_subscription<Message>(
-      topic_name, qos,
-      [publisher = _publisher](
-        typename Message::SharedPtr msg)
-      {
-        publisher.get_subscriber().on_next(msg);
-      });
-
-    _observable = _publisher.get_observable();
-  }
-
-  const rxcpp::observable<typename Message::SharedPtr>& observe() const
-  {
-    return _observable;
-  }
-
-  ~SubscriptionBridge()
-  {
-    _publisher.get_subscriber().on_completed();
-  }
-
-private:
-  rxcpp::subjects::subject<typename Message::SharedPtr> _publisher;
-  rxcpp::observable<typename Message::SharedPtr> _observable;
-  typename rclcpp::Subscription<Message>::SharedPtr _subscription;
-
 };
 
 // TODO(MXG): We define all the member functions of this class inline so that we
@@ -179,25 +132,25 @@ class Transport : public rclcpp::Node
 {
 public:
 
-  template<typename Message>
-  using Bridge = std::shared_ptr<SubscriptionBridge<Message>>;
-
   explicit Transport(
-    rxcpp::schedulers::worker worker,
-    const std::string& node_name,
-    const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
-  : rclcpp::Node{node_name, options},
-    _executor{std::make_shared<RxCppExecutor>(
-        worker, _make_exec_args(options))}
+      rxcpp::schedulers::worker worker,
+      const std::string& node_name,
+      const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
+    : rclcpp::Node{node_name, options},
+      _executor{std::make_shared<RxCppExecutor>(
+                  worker, _make_exec_args(options))}
   {
     // Do nothing
   }
 
   void start()
   {
-    std::unique_lock<std::mutex> lock(_stopping_mutex);
-    if (!_stopped)
+    if (!_executor->stopped() && !_stopping)
       return;
+
+    // If the spinning is being stopped, wait for the stopping to finish before
+    // we start back up.
+    stop();
 
     if (!_node_added)
     {
@@ -205,41 +158,51 @@ public:
       _node_added = true;
     }
 
-    _stopped = false;
+    std::unique_lock<std::mutex> lock(_stopping_mutex);
+    _stopping = false;
 
     _spin_thread = std::thread([&]()
-        {
-          _executor->spin();
-        });
-
-    _executor->wait_until_started();
+    {
+      _executor->spin();
+    });
   }
 
   void stop()
   {
-    {
-      std::unique_lock<std::mutex> lock(_stopping_mutex);
-      if (_stopped)
-        return;
+    if (_executor->stopped())
+      return;
 
+    if (!_stopping.exchange(true))
+    {
       _executor->stop();
+
       if (_spin_thread.joinable())
         _spin_thread.join();
 
-      _stopped = true;
+      {
+        std::lock_guard<std::mutex> lock(_stopping_mutex);
+        _stopping = false;
+      }
     }
-
-    _stopped_cv.notify_all();
+    else
+    {
+      std::unique_lock<std::mutex> lock(_stopping_mutex);
+      if (!_executor->stopped())
+      {
+        _executor->stopped_cv().wait(
+              lock, [&](){ return _executor->stopped(); });
+      }
+    }
   }
 
   std::condition_variable& spin_cv()
   {
-    return _stopped_cv;
+    return _executor->stopped_cv();
   }
 
   bool still_spinning() const
   {
-    return !_stopped && rclcpp::ok(get_node_options().context());
+    return !_stopping && rclcpp::ok(get_node_options().context());
   }
 
   /**
@@ -252,11 +215,14 @@ public:
    * @return
    */
   template<typename Message>
-  Bridge<Message> create_observable(
-    const std::string& topic_name, const rclcpp::QoS& qos)
+  auto create_observable(const std::string& topic_name, const rclcpp::QoS& qos)
   {
-    return std::make_shared<
-      SubscriptionBridge<Message>>(shared_from_this(), topic_name, qos);
+    auto wrapper = std::make_shared<detail::SubscriptionWrapper<Message>>(
+      shared_from_this(), topic_name, qos);
+    return rxcpp::observable<>::create<typename Message::SharedPtr>([wrapper](const auto& s)
+    {
+      (*wrapper)(s);
+    }).publish().ref_count().observe_on(rxcpp::observe_on_event_loop());
   }
 
   ~Transport()
@@ -265,16 +231,15 @@ public:
   }
 
 private:
+  std::atomic_bool _stopping = false;
   std::mutex _stopping_mutex;
-  bool _stopped = true;
-  std::condition_variable _stopped_cv;
 
   std::shared_ptr<RxCppExecutor> _executor;
   bool _node_added = false;
   std::thread _spin_thread;
 
   static rclcpp::ExecutorOptions _make_exec_args(
-    const rclcpp::NodeOptions& options)
+      const rclcpp::NodeOptions& options)
   {
     rclcpp::ExecutorOptions exec_args;
     exec_args.context = options.context();

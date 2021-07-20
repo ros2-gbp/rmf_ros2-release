@@ -41,21 +41,14 @@
 
 
 //==============================================================================
-// TODO(MXG): This test can be flaky. It seems that status messages are
-// sometimes dropped. This should be investigated further. While our systems
-// in general should be robust to dropped messages, it's concerning that they
-// would get dropped within this test.
-//
-// For the sake of CI, we're hiding this test for now using the [.flaky] label,
-// but we should investigate it further as soon as time permits.
-SCENARIO("Test loop requests", "[.flaky]")
+SCENARIO("Test loop requests")
 {
   rmf_fleet_adapter_test::thread_cooldown = true;
   using namespace std::chrono_literals;
 
   const std::string test_map_name = "test_map";
   rmf_traffic::agv::Graph graph;
-  graph.add_waypoint(test_map_name, {0.0, -10.0}).set_charger(true); // 0
+  graph.add_waypoint(test_map_name, {0.0, -10.0}); // 0
   graph.add_waypoint(test_map_name, {0.0, -5.0});  // 1
   graph.add_waypoint(test_map_name, {5.0, -5.0}).set_holding_point(true);  // 2
   graph.add_waypoint(test_map_name, {-10.0, 0.0}); // 3
@@ -161,8 +154,7 @@ SCENARIO("Test loop requests", "[.flaky]")
 
   const auto task_sub = adapter.node()->create_subscription<
     rmf_task_msgs::msg::TaskSummary>(
-    rmf_fleet_adapter::TaskSummaryTopicName,
-    rclcpp::SystemDefaultsQoS().keep_last(1000),
+    rmf_fleet_adapter::TaskSummaryTopicName, rclcpp::SystemDefaultsQoS(),
     [&task_0_completed_promise, &loop_0, &at_least_one_incomplete_task_0,
     &completed_0_count, &last_task_0_msg, &finding_a_plan_0_count,
     &task_1_completed_promise, &loop_1, &at_least_one_incomplete_task_1,
@@ -187,10 +179,7 @@ SCENARIO("Test loop requests", "[.flaky]")
           ++completed_1_count;
         }
         else
-        {
-          // ResponsiveWait
-          return;
-        }
+          CHECK(false);
       }
       else
       {
@@ -199,10 +188,7 @@ SCENARIO("Test loop requests", "[.flaky]")
         else if (msg->task_id == loop_1)
           at_least_one_incomplete_task_1 = true;
         else
-        {
-          // ResponsiveWait
-          return;
-        }
+          CHECK(false);
       }
 
       if (msg->task_id == loop_0)

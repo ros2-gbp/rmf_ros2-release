@@ -33,8 +33,7 @@ namespace phases {
 
 struct IngestItem
 {
-  class ActivePhase : public Task::ActivePhase,
-    public std::enable_shared_from_this<ActivePhase>
+  class ActivePhase : public Task::ActivePhase, public std::enable_shared_from_this<ActivePhase>
   {
   public:
 
