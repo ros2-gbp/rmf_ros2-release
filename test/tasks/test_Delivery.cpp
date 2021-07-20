@@ -47,41 +47,11 @@
 /// This mock dispenser will not publish any states; it will only publish a
 /// successful result and nothing else.
 class MockQuietDispenser
-  : public std::enable_shared_from_this<MockQuietDispenser>
 {
 public:
 
-  static std::shared_ptr<MockQuietDispenser> make(
-    std::shared_ptr<rclcpp::Node> node,
-    std::string name)
-  {
-    auto dispenser = std::shared_ptr<MockQuietDispenser>(
-      new MockQuietDispenser(std::move(node), std::move(name)));
-
-    dispenser->_request_sub =
-      dispenser->_node->create_subscription<DispenserRequest>(
-      rmf_fleet_adapter::DispenserRequestTopicName,
-      rclcpp::SystemDefaultsQoS(),
-      [me = dispenser->weak_from_this()](DispenserRequest::SharedPtr msg)
-      {
-        if (const auto self = me.lock())
-          self->_process_request(*msg);
-      });
-
-    dispenser->_result_pub =
-      dispenser->_node->create_publisher<DispenserResult>(
-      rmf_fleet_adapter::DispenserResultTopicName,
-      rclcpp::SystemDefaultsQoS());
-
-    return dispenser;
-  }
-
   using DispenserRequest = rmf_dispenser_msgs::msg::DispenserRequest;
   using DispenserResult = rmf_dispenser_msgs::msg::DispenserResult;
-
-  std::promise<bool> success_promise;
-
-private:
 
   MockQuietDispenser(
     std::shared_ptr<rclcpp::Node> node,
@@ -89,16 +59,28 @@ private:
   : _node(std::move(node)),
     _name(std::move(name))
   {
-    // Initialized in make()
+    _request_sub = _node->create_subscription<DispenserRequest>(
+      rmf_fleet_adapter::DispenserRequestTopicName,
+      rclcpp::SystemDefaultsQoS(),
+      [this](DispenserRequest::SharedPtr msg)
+      {
+        _process_request(*msg);
+      });
+
+    _result_pub = _node->create_publisher<DispenserResult>(
+      rmf_fleet_adapter::DispenserResultTopicName,
+      rclcpp::SystemDefaultsQoS());
   }
 
+  std::promise<bool> success_promise;
+
+private:
   std::shared_ptr<rclcpp::Node> _node;
   std::string _name;
   rclcpp::Subscription<DispenserRequest>::SharedPtr _request_sub;
   rclcpp::Publisher<DispenserResult>::SharedPtr _result_pub;
   std::unordered_map<std::string, bool> _task_complete_map;
   rclcpp::TimerBase::SharedPtr _timer;
-  bool _fulfilled_promise = false;
 
   void _process_request(const DispenserRequest& msg)
   {
@@ -115,27 +97,19 @@ private:
     {
       using namespace std::chrono_literals;
       _timer = _node->create_wall_timer(
-        1ms, [me = weak_from_this(), msg]()
+        10ms, [this, msg]()
         {
-          const auto self = me.lock();
-          if (!self)
-            return;
-
-          self->_timer.reset();
-          self->_task_complete_map[msg.request_guid] = true;
+          _timer.reset();
+          _task_complete_map[msg.request_guid] = true;
 
           DispenserResult result;
-          result.time = self->_node->now();
+          result.time = _node->now();
           result.status = DispenserResult::SUCCESS;
-          result.source_guid = self->_name;
+          result.source_guid = _name;
           result.request_guid = msg.request_guid;
-          self->_result_pub->publish(result);
+          _result_pub->publish(result);
 
-          if (!self->_fulfilled_promise)
-          {
-            self->_fulfilled_promise = true;
-            self->success_promise.set_value(true);
-          }
+          success_promise.set_value(true);
         });
     }
 
@@ -153,86 +127,12 @@ private:
 /// This mock ingestor will not publish any results; it will only publish
 /// states. This is representative of network issues where a result might not
 /// actually arrive, but the state heartbeats can still get through.
-class MockFlakyIngestor : public std::enable_shared_from_this<MockFlakyIngestor>
+class MockFlakyIngestor
 {
 public:
 
   using IngestorRequest = rmf_ingestor_msgs::msg::IngestorRequest;
   using IngestorState = rmf_ingestor_msgs::msg::IngestorState;
-
-  static std::shared_ptr<MockFlakyIngestor> make(
-    std::shared_ptr<rclcpp::Node> node,
-    std::string name)
-  {
-    auto ingestor = std::shared_ptr<MockFlakyIngestor>(
-      new MockFlakyIngestor(std::move(node), std::move(name)));
-
-    ingestor->_request_sub =
-      ingestor->_node->create_subscription<IngestorRequest>(
-      rmf_fleet_adapter::IngestorRequestTopicName,
-      rclcpp::SystemDefaultsQoS(),
-      [me = ingestor->weak_from_this()](IngestorRequest::SharedPtr msg)
-      {
-        if (const auto self = me.lock())
-          self->_process_request(*msg);
-      });
-
-    ingestor->_state_pub = ingestor->_node->create_publisher<IngestorState>(
-      rmf_fleet_adapter::IngestorStateTopicName,
-      rclcpp::SystemDefaultsQoS());
-
-    using namespace std::chrono_literals;
-    ingestor->_timer = ingestor->_node->create_wall_timer(
-      1ms, [me = ingestor->weak_from_this()]()
-      {
-        const auto self = me.lock();
-        if (!self)
-          return;
-
-        IngestorState msg;
-        msg.guid = self->_name;
-
-        if (self->_request_queue.empty())
-          msg.mode = IngestorState::IDLE;
-        else
-          msg.mode = IngestorState::BUSY;
-
-        msg.time = self->_node->now();
-        msg.seconds_remaining = 0.1;
-
-        for (auto& r : self->_request_queue)
-        {
-          msg.request_guid_queue.push_back(r.request.request_guid);
-          ++r.publish_count;
-        }
-
-        const std::size_t initial_count = self->_request_queue.size();
-
-        self->_request_queue.erase(std::remove_if(
-          self->_request_queue.begin(), self->_request_queue.end(),
-          [](const auto& r)
-          {
-            return r.publish_count > 2;
-          }), self->_request_queue.end());
-
-        if (self->_request_queue.size() < initial_count)
-        {
-          if (!self->_fulfilled_promise)
-          {
-            self->_fulfilled_promise = true;
-            self->success_promise.set_value(true);
-          }
-        }
-
-        self->_state_pub->publish(msg);
-      });
-
-    return ingestor;
-  }
-
-  std::promise<bool> success_promise;
-
-private:
 
   MockFlakyIngestor(
     std::shared_ptr<rclcpp::Node> node,
@@ -240,8 +140,64 @@ private:
   : _node(std::move(node)),
     _name(std::move(name))
   {
-    // Further initialization is done in make()
+    _request_sub = _node->create_subscription<IngestorRequest>(
+      rmf_fleet_adapter::IngestorRequestTopicName,
+      rclcpp::SystemDefaultsQoS(),
+      [this](IngestorRequest::SharedPtr msg)
+      {
+        _process_request(*msg);
+      });
+
+    _state_pub = _node->create_publisher<IngestorState>(
+      rmf_fleet_adapter::IngestorStateTopicName,
+      rclcpp::SystemDefaultsQoS());
+
+    using namespace std::chrono_literals;
+    _timer = _node->create_wall_timer(
+      100ms, [this]()
+      {
+        IngestorState msg;
+        msg.guid = _name;
+
+        if (_request_queue.empty())
+          msg.mode = IngestorState::IDLE;
+        else
+          msg.mode = IngestorState::BUSY;
+
+        msg.time = _node->now();
+        msg.seconds_remaining = 0.1;
+
+        for (auto& r : _request_queue)
+        {
+          msg.request_guid_queue.push_back(r.request.request_guid);
+          ++r.publish_count;
+        }
+
+        const std::size_t initial_count = _request_queue.size();
+
+        _request_queue.erase(std::remove_if(
+          _request_queue.begin(), _request_queue.end(),
+          [](const auto& r)
+          {
+            return r.publish_count > 2;
+          }), _request_queue.end());
+
+        if (_request_queue.size() < initial_count)
+        {
+          if (!_fulfilled_promise)
+          {
+            _fulfilled_promise = true;
+            success_promise.set_value(true);
+          }
+        }
+
+        _state_pub->publish(msg);
+      });
   }
+
+  std::promise<bool> success_promise;
+
+private:
 
   struct RequestEntry
   {
@@ -276,7 +232,7 @@ SCENARIO("Test Delivery")
 
   const std::string test_map_name = "test_map";
   rmf_traffic::agv::Graph graph;
-  graph.add_waypoint(test_map_name, {0.0, -10.0}).set_charger(true); // 0
+  graph.add_waypoint(test_map_name, {0.0, -10.0}); // 0
   graph.add_waypoint(test_map_name, {0.0, -5.0});  // 1
   graph.add_waypoint(test_map_name, {5.0, -5.0}).set_holding_point(true);  // 2
   graph.add_waypoint(test_map_name, {-10.0, 0.0}); // 3
@@ -360,22 +316,15 @@ SCENARIO("Test Delivery")
 
   std::promise<bool> completed_promise;
   bool at_least_one_incomplete = false;
-  bool fulfilled_promise = false;
   auto completed_future = completed_promise.get_future();
   const auto task_sub = adapter.node()->create_subscription<
     rmf_task_msgs::msg::TaskSummary>(
     rmf_fleet_adapter::TaskSummaryTopicName, rclcpp::SystemDefaultsQoS(),
-    [&completed_promise, &at_least_one_incomplete, &fulfilled_promise](
+    [&completed_promise, &at_least_one_incomplete](
       const rmf_task_msgs::msg::TaskSummary::SharedPtr msg)
     {
       if (msg->STATE_COMPLETED == msg->state)
-      {
-        if (!fulfilled_promise)
-        {
-          fulfilled_promise = true;
-          completed_promise.set_value(true);
-        }
-      }
+        completed_promise.set_value(true);
       else
         at_least_one_incomplete = true;
     });
@@ -432,14 +381,14 @@ SCENARIO("Test Delivery")
     });
 
   const std::string quiet_dispenser_name = "quiet";
-  auto quiet_dispenser = MockQuietDispenser::make(
+  auto quiet_dispenser = MockQuietDispenser(
     adapter.node(), quiet_dispenser_name);
-  auto quiet_future = quiet_dispenser->success_promise.get_future();
+  auto quiet_future = quiet_dispenser.success_promise.get_future();
 
   const std::string flaky_ingestor_name = "flaky";
-  auto flaky_ingestor = MockFlakyIngestor::make(
+  auto flaky_ingestor = MockFlakyIngestor(
     adapter.node(), flaky_ingestor_name);
-  auto flaky_future = flaky_ingestor->success_promise.get_future();
+  auto flaky_future = flaky_ingestor.success_promise.get_future();
 
   adapter.start();
 
