@@ -29,21 +29,25 @@ if(BUILD_TESTING)
   find_package(rmf_utils REQUIRED)
   find_package(std_msgs REQUIRED)
   find_package(rmf_cmake_uncrustify REQUIRED)
-  find_file(uncrustify_config_file NAMES 
-    NAMES "rmf_code_style.cfg"
-    PATHS "${rmf_utils_DIR}/../../../share/rmf_utils/")
+  find_file(uncrustify_config_file NAMES "share/format/rmf_code_style.cfg")
+
+  rmf_uncrustify(
+    ARGN include src test
+    CONFIG_FILE ${uncrustify_config_file}
+    MAX_LINE_LENGTH 80
+  )
 
   ament_add_catch2(
-    test_rmf_rxcpp
+    rmf_rxcpp_test
       test/main.cpp
-      test/test_RxJobs.cpp
-      test/test_Transport.cpp
+      test/RxJobsTest.cpp
+      test/TransportTest.cpp
   )
-  target_include_directories(test_rmf_rxcpp
+  target_include_directories(rmf_rxcpp_test
     PRIVATE
       ${std_msgs_INCLUDE_DIRS}
   )
-  target_link_libraries(test_rmf_rxcpp
+  target_link_libraries(rmf_rxcpp_test
     PRIVATE
       rmf_rxcpp
       rmf_utils::rmf_utils

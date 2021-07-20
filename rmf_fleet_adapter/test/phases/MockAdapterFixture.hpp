@@ -31,20 +31,11 @@ namespace test {
 
 struct MockAdapterFixture
 {
-  struct Data
-  {
-    std::shared_ptr<agv::Node> node;
-    std::shared_ptr<rclcpp::Node> ros_node;
-    rmf_traffic::agv::Graph graph;
-
-    static std::size_t _node_counter;
-    std::shared_ptr<rclcpp::Context> _context;
-
-    std::shared_ptr<agv::test::MockAdapter> adapter;
-    std::shared_ptr<agv::FleetUpdateHandle> fleet;
-  };
-
-  std::shared_ptr<Data> data;
+  std::shared_ptr<agv::test::MockAdapter> adapter;
+  std::shared_ptr<agv::FleetUpdateHandle> fleet;
+  std::shared_ptr<agv::Node> node;
+  std::shared_ptr<rclcpp::Node> ros_node;
+  rmf_traffic::agv::Graph graph;
 
   struct RobotInfo
   {
@@ -60,12 +51,17 @@ struct MockAdapterFixture
   /// \param[in] profile
   ///   Specify its profile. Leaving this as nullopt will use default profile.
   RobotInfo add_robot(
-    const std::string& name = "test_robot",
-    rmf_utils::optional<rmf_traffic::Profile> profile = rmf_utils::nullopt);
+      const std::string& name = "test_robot",
+      rmf_utils::optional<rmf_traffic::Profile> profile = rmf_utils::nullopt);
 
   MockAdapterFixture();
 
   ~MockAdapterFixture();
+
+private:
+
+  static std::size_t _node_counter;
+  std::shared_ptr<rclcpp::Context> _context;
 };
 
 } // namespace test
