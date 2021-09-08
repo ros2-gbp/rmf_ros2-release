@@ -70,15 +70,6 @@ std::shared_ptr<FleetAdapterNode> FleetAdapterNode::make()
       node->_negotiation = rmf_traffic_ros2::schedule::Negotiation(
         *node, node->_mirror->snapshot_handle());
 
-      // Don't subscribe until everything else is ready
-      node->_fleet_state_subscription =
-        node->create_subscription<FleetState>(
-        FleetStateTopicName, rclcpp::SystemDefaultsQoS(),
-        [self = node.get()](FleetState::UniquePtr msg)
-        {
-          self->fleet_state_update(std::move(msg));
-        });
-
       return node;
     }
   }
@@ -182,7 +173,13 @@ FleetAdapterNode::FleetAdapterNode()
   _fleet_name(get_fleet_name_parameter(*this)),
   _traits(get_traits_or_default(*this, 0.7, 0.3, 0.5, 1.5, 0.5, 1.5))
 {
-  // Do nothing. Everything else is initialized in make()
+  _fleet_state_subscription =
+    create_subscription<FleetState>(
+    FleetStateTopicName, rclcpp::SystemDefaultsQoS(),
+    [&](FleetState::UniquePtr msg)
+    {
+      this->fleet_state_update(std::move(msg));
+    });
 }
 
 //==============================================================================

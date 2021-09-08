@@ -44,8 +44,8 @@ public:
   using ReservationId = rmf_traffic::blockade::ReservationId;
   using NewRangeCallback =
     std::function<void(
-        const ReservationId reservation,
-        const ReservedRange& range)>;
+      const ReservationId reservation,
+      const ReservedRange& range)>;
 
   /// Make a blockade participant.
   ///
@@ -62,17 +62,15 @@ public:
   ///
   /// \return the API for updating the blockade Participant.
   rmf_traffic::blockade::Participant make_participant(
-    rmf_traffic::blockade::ParticipantId id,
-    double radius,
-    NewRangeCallback new_range_cb);
+      rmf_traffic::blockade::ParticipantId id,
+      double radius,
+      NewRangeCallback new_range_cb);
 
   class Implementation;
 private:
   Writer(rclcpp::Node& node);
   rmf_utils::unique_impl_ptr<Implementation> _pimpl;
 };
-
-using WriterPtr = std::shared_ptr<Writer>;
 
 } // namespace blockade
 } // namespace rmf_traffic_ros2

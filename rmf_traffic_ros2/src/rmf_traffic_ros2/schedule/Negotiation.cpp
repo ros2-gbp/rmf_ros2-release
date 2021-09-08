@@ -48,7 +48,7 @@ std::string table_to_string(
 }
 
 //==============================================================================
-template<typename T>
+template <typename T>
 std::string ptr_to_string(T* ptr)
 {
   std::stringstream str;
@@ -74,27 +74,27 @@ public:
       table(table_),
       table_version(table->version()),
       parent(table->parent()),
-      parent_version(parent ? OptVersion(parent->version()) : OptVersion())
+      parent_version(parent? OptVersion(parent->version()) : OptVersion())
     {
       // Do nothing
     }
 
     template<typename... Args>
     static std::shared_ptr<Responder> make(
-      Args&& ... args)
+        Args&&... args)
     {
       auto responder = std::make_shared<Responder>(std::forward<Args>(args)...);
       rclcpp::Node& node = responder->impl->node;
       responder->timer = node.create_wall_timer(
-        responder->impl->timeout,
-        [r = std::weak_ptr<Responder>(responder)]()
+            responder->impl->timeout,
+            [r = std::weak_ptr<Responder>(responder)]()
+      {
+        if (auto responder = r.lock())
         {
-          if (auto responder = r.lock())
-          {
-            responder->timer.reset();
-            responder->timeout();
-          }
-        });
+          responder->timer.reset();
+          responder->timeout();
+        }
+      });
 
       return responder;
     }
@@ -125,12 +125,12 @@ public:
               continue;
 
             impl->worker->schedule(
-              [viewer = c->viewer(),
-              negotiator = n_it->second.get(),
-              responder = make(impl, conflict_version, c)]()
-              {
-                negotiator->respond(viewer, responder);
-              });
+                  [viewer = c->viewer(),
+                   negotiator = n_it->second.get(),
+                   responder = make(impl, conflict_version, c)]()
+            {
+              negotiator->respond(viewer, responder);
+            });
           }
         }
       }
@@ -146,7 +146,7 @@ public:
         if (parent->reject(*parent_version, table->participant(), alternatives))
         {
           impl->publish_rejection(
-            conflict_version, *parent, table->participant(), alternatives);
+                conflict_version, *parent, table->participant(), alternatives);
 
           // TODO(MXG): We don't schedule a response to the rejection for
           // async negotiations, because the ROS2 subscription will do that for
@@ -257,14 +257,9 @@ public:
   using AckPub = rclcpp::Publisher<Ack>;
   AckPub::SharedPtr ack_pub;
 
-  using NegotiatorMapPtr = std::shared_ptr<NegotiatorMap>;
-  using WeakNegotiatorMapPtr = std::weak_ptr<NegotiatorMap>;
-  NegotiatorMapPtr negotiators;
-
-  using FailureMap = std::unordered_map<ParticipantId, std::function<void()>>;
-  using FailureMapPtr = std::shared_ptr<FailureMap>;
-  using WeakFailureMapPtr = std::weak_ptr<FailureMap>;
-  FailureMapPtr failure_callbacks;
+  using NegotiationMapPtr = std::shared_ptr<NegotiatorMap>;
+  using WeakNegotiationMapPtr = std::weak_ptr<NegotiatorMap>;
+  NegotiationMapPtr negotiators;
 
   using Version = rmf_traffic::schedule::Version;
   using Negotiation = rmf_traffic::schedule::Negotiation;
@@ -312,8 +307,7 @@ public:
   : node(node_),
     viewer(std::move(viewer_)),
     worker(std::move(worker_)),
-    negotiators(std::make_shared<NegotiatorMap>()),
-    failure_callbacks(std::make_shared<FailureMap>())
+    negotiators(std::make_shared<NegotiatorMap>())
   {
     // TODO(MXG): Make the QoS configurable
     const auto qos = rclcpp::ServicesQoS().reliable().keep_last(1000);
@@ -425,8 +419,8 @@ public:
   }
 
   void respond_to_queue(
-    std::vector<TablePtr> queue,
-    Version conflict_version)
+      std::vector<TablePtr> queue,
+      Version conflict_version)
   {
     while (!queue.empty())
     {
@@ -453,7 +447,7 @@ public:
 
         const auto& negotiator = n_it->second;
         negotiator->respond(
-          top->viewer(), Responder::make(this, conflict_version, top));
+              top->viewer(), Responder::make(this, conflict_version, top));
       }
 
       if (top->submission())
@@ -483,7 +477,7 @@ public:
 
 
     auto new_negotiation = Negotiation::make(
-      viewer->snapshot(), msg.participants);
+          viewer->snapshot(), msg.participants);
     if (!new_negotiation)
     {
       // TODO(MXG): This is a temporary hack to deal with situations where a
@@ -568,8 +562,7 @@ public:
         + std::to_string(msg.conflict_version) + "] that builds on an "
         "unknown table: [";
       for (const auto p : msg.to_accommodate)
-        error += " " + std::to_string(p.participant) + ":" + std::to_string(
-          p.version);
+        error += " " + std::to_string(p.participant) + ":" + std::to_string(p.version);
       error += " " + std::to_string(msg.for_participant) + " ]";
 
       RCLCPP_WARN(node.get_logger(), error.c_str());
@@ -591,7 +584,7 @@ public:
       auto table_view = received_table->viewer();
       status_callback(msg.conflict_version, table_view);
     }
-
+    
     std::vector<TablePtr> queue = room.check_cache(*negotiators);
 
     if (!participating)
@@ -633,8 +626,7 @@ public:
         + std::to_string(msg.conflict_version) + "] for an "
         "unknown table: [";
       for (const auto p : msg.table)
-        error += " " + std::to_string(p.participant) + ":" + std::to_string(
-          p.version);
+        error += " " + std::to_string(p.participant) + ":" + std::to_string(p.version);
       error += " ]";
 
       RCLCPP_WARN(node.get_logger(), error.c_str());
@@ -700,19 +692,18 @@ public:
   }
 
   void dump_conclusion_info(
-    const Conclusion& msg,
-    const Approvals::const_iterator& approval_callback_it,
-    const Negotiation& negotiation)
+      const Conclusion& msg,
+      const Approvals::const_iterator& approval_callback_it,
+      const Negotiation& negotiation)
   {
     const auto full_sequence = convert(msg.table);
 
     std::string err =
-      "\n !!!!!!!!!!!! Impossible situation encountered for Negotiation ["
-      + std::to_string(msg.conflict_version) + "] in node ["
-      + node.get_name() + "]: No approval callbacks found?? Sequence: [";
+        "\n !!!!!!!!!!!! Impossible situation encountered for Negotiation ["
+        + std::to_string(msg.conflict_version) + "] in node ["
+        + node.get_name() + "]: No approval callbacks found?? Sequence: [";
     for (const auto s : msg.table)
-      err += " " + std::to_string(s.participant) + ":" + std::to_string(
-        s.version);
+      err += " " + std::to_string(s.participant) + ":" + std::to_string(s.version);
     err += " ] ";
 
     if (msg.resolved)
@@ -726,23 +717,21 @@ public:
         err += "\n -- " + ptr_to_string(table.get()) + " |";
 
         for (const auto& s : table->sequence())
-          err += " " + std::to_string(s.participant) + ":" + std::to_string(
-            s.version);
+          err += " " + std::to_string(s.participant) + ":" + std::to_string(s.version);
       }
 
       err += "\nCurrent relevant tables in the negotiation:";
       for (std::size_t i = 1; i <= msg.table.size(); ++i)
       {
         std::vector<ParticipantId> sequence;
-        for (std::size_t j = 0; j < i; ++j)
+        for (std::size_t j=0; j < i; ++j)
           sequence.push_back(full_sequence[j].participant);
 
         const auto table = negotiation.table(sequence);
         err += "\n -- " + ptr_to_string(table.get()) + " |";
 
-        for (std::size_t j = 0; j < i; ++j)
-          err += " " + std::to_string(msg.table[j].participant) + ":" +
-            std::to_string(msg.table[j].version);
+        for (std::size_t j=0; j < i; ++j)
+          err += " " + std::to_string(msg.table[j].participant) + ":" + std::to_string(msg.table[j].version);
       }
     }
     else
@@ -785,7 +774,7 @@ public:
         for (std::size_t i = 1; i <= msg.table.size(); ++i)
         {
           const auto sequence = Negotiation::VersionedKeySequence(
-            full_sequence.begin(), full_sequence.begin()+i);
+                full_sequence.begin(), full_sequence.begin()+i);
           const auto participant = sequence.back().participant;
 
           const auto search = negotiation.find(sequence);
@@ -823,8 +812,8 @@ public:
             // We will do a brute-force search through our approval callbacks
             // to dig up the relevant one.
             for (auto a_it = approval_callbacks.begin();
-              a_it != approval_callbacks.end();
-              ++a_it)
+                 a_it != approval_callbacks.end();
+                 ++a_it)
             {
               if (a_it->second.sequence == sequence)
               {
@@ -867,19 +856,6 @@ public:
       }
       else
       {
-        for (const auto p : room.negotiation.participants())
-        {
-          // If we have a failure callback for one of the participants in this
-          // failed negotiation, then trigger its failure callback.
-          const auto f_it = failure_callbacks->find(p);
-          if (f_it != failure_callbacks->end())
-          {
-            const auto& callback = f_it->second;
-            if (callback)
-              callback();
-          }
-        }
-
         ParticipantAck p_ack;
         p_ack.updating = false;
         for (const auto p : negotiation.participants())
@@ -914,7 +890,7 @@ public:
 
     if (conclusion_callback)
       conclusion_callback(msg.conflict_version, msg.resolved);
-
+    
     // add to retained history
     if (retained_history_count > 0)
     {
@@ -924,7 +900,7 @@ public:
       history.emplace(
         msg.conflict_version, std::move(negotiate_it->second.room.negotiation));
     }
-
+    
     // Erase these entries because the negotiation has concluded
     negotiations.erase(negotiate_it);
   }
@@ -980,33 +956,26 @@ public:
   {
     Handle(
       const ParticipantId for_participant_,
-      NegotiatorMapPtr negotiators,
-      FailureMapPtr failure)
+      NegotiationMapPtr map)
     : for_participant(for_participant_),
-      weak_negotiator_map(negotiators),
-      weak_failure_map(failure)
+      weak_map(map)
     {
       // Do nothing
     }
 
     ParticipantId for_participant;
-    WeakNegotiatorMapPtr weak_negotiator_map;
-    WeakFailureMapPtr weak_failure_map;
+    WeakNegotiationMapPtr weak_map;
 
     ~Handle()
     {
-      if (const auto map = weak_negotiator_map.lock())
-        map->erase(for_participant);
-
-      if (const auto map = weak_failure_map.lock())
+      if (const auto map = weak_map.lock())
         map->erase(for_participant);
     }
   };
 
   std::shared_ptr<void> register_negotiator(
     const ParticipantId for_participant,
-    NegotiatorPtr negotiator,
-    std::function<void()> failure_cb)
+    NegotiatorPtr negotiator)
   {
     const auto insertion = negotiators->insert(
       std::make_pair(for_participant, std::move(negotiator)));
@@ -1021,14 +990,7 @@ public:
       // *INDENT-ON*
     }
 
-    if (failure_cb)
-    {
-      failure_callbacks->insert(
-        std::make_pair(for_participant, std::move(failure_cb)));
-    }
-
-    return std::make_shared<Handle>(
-      for_participant, negotiators, failure_callbacks);
+    return std::make_shared<Handle>(for_participant, negotiators);
   }
 
   void set_retained_history_count(uint count)
@@ -1062,7 +1024,7 @@ public:
     {
       const auto& room = negotiate_it->second.room;
       const Negotiation& negotiation = room.negotiation;
-      table = negotiation.table(sequence);
+      table = negotiation.table(sequence);  
     }
 
     if (!table)
@@ -1091,7 +1053,7 @@ Negotiation::Negotiation(
   std::shared_ptr<const rmf_traffic::schedule::Snappable> viewer,
   std::shared_ptr<Worker> worker)
 : _pimpl(rmf_utils::make_unique_impl<Implementation>(
-      node, std::move(viewer), std::move(worker)))
+           node, std::move(viewer), std::move(worker)))
 {
   // Do nothing
 }
@@ -1123,8 +1085,8 @@ rmf_traffic::Duration Negotiation::timeout_duration() const
 
 //==============================================================================
 Negotiation::TableViewPtr Negotiation::table_view(
-  uint64_t conflict_version,
-  const std::vector<ParticipantId>& sequence) const
+    uint64_t conflict_version,
+    const std::vector<ParticipantId>& sequence) const
 {
   return _pimpl->table_view(conflict_version, sequence);
 }
@@ -1140,54 +1102,7 @@ std::shared_ptr<void> Negotiation::register_negotiator(
   rmf_traffic::schedule::ParticipantId for_participant,
   std::unique_ptr<rmf_traffic::schedule::Negotiator> negotiator)
 {
-  return _pimpl->register_negotiator(
-    for_participant, std::move(negotiator), nullptr);
-}
-
-//==============================================================================
-std::shared_ptr<void> Negotiation::register_negotiator(
-  rmf_traffic::schedule::ParticipantId for_participant,
-  std::unique_ptr<rmf_traffic::schedule::Negotiator> negotiator,
-  std::function<void()> on_negotiation_failure)
-{
-  return _pimpl->register_negotiator(
-    for_participant, std::move(negotiator), std::move(on_negotiation_failure));
-}
-
-//==============================================================================
-class LambdaNegotiator : public rmf_traffic::schedule::Negotiator
-{
-public:
-
-  using RespondFn = std::function<void(TableViewerPtr, ResponderPtr)>;
-
-  LambdaNegotiator(RespondFn respond)
-  : _respond(std::move(respond))
-  {
-    // Do nothing
-  }
-
-  void respond(
-    const TableViewerPtr& table_viewer,
-    const ResponderPtr& responder) final
-  {
-    _respond(std::move(table_viewer), std::move(responder));
-  }
-
-private:
-  RespondFn _respond;
-};
-
-//==============================================================================
-std::shared_ptr<void> Negotiation::register_negotiator(
-  rmf_traffic::schedule::ParticipantId for_participant,
-  std::function<void(TableViewPtr, ResponderPtr)> respond,
-  std::function<void()> on_negotiation_failure)
-{
-  return register_negotiator(
-    for_participant,
-    std::make_unique<LambdaNegotiator>(std::move(respond)),
-    std::move(on_negotiation_failure));
+  return _pimpl->register_negotiator(for_participant, std::move(negotiator));
 }
 
 } // namespace schedule
