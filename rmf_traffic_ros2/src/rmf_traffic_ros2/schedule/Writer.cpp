@@ -27,6 +27,8 @@
 
 #include <rmf_traffic_msgs/msg/schedule_inconsistency.hpp>
 
+#include <rmf_traffic_msgs/msg/fail_over_event.hpp>
+
 #include <rmf_traffic_msgs/srv/register_participant.hpp>
 #include <rmf_traffic_msgs/srv/unregister_participant.hpp>
 
@@ -151,7 +153,7 @@ public:
 
   class Transport
     : public rmf_traffic::schedule::Writer,
-      public std::enable_shared_from_this<Transport>
+    public std::enable_shared_from_this<Transport>
   {
   public:
     std::shared_ptr<RectifierFactory> rectifier_factory;
@@ -176,28 +178,37 @@ public:
     rclcpp::Client<Register>::SharedPtr register_client;
     rclcpp::Client<Unregister>::SharedPtr unregister_client;
 
+    using FailOverEvent = rmf_traffic_msgs::msg::FailOverEvent;
+    using FailOverEventSub = rclcpp::Subscription<FailOverEvent>::SharedPtr;
+    FailOverEventSub fail_over_event_sub;
+
     Transport(rclcpp::Node& node)
     : rectifier_factory(std::make_shared<RectifierFactory>(node))
     {
+      const auto itinerary_qos =
+        rclcpp::SystemDefaultsQoS()
+        .reliable()
+        .keep_last(100);
+
       set_pub = node.create_publisher<Set>(
         ItinerarySetTopicName,
-        rclcpp::SystemDefaultsQoS().best_effort());
+        itinerary_qos);
 
       extend_pub = node.create_publisher<Extend>(
         ItineraryExtendTopicName,
-        rclcpp::SystemDefaultsQoS().best_effort());
+        itinerary_qos);
 
       delay_pub = node.create_publisher<Delay>(
         ItineraryDelayTopicName,
-        rclcpp::SystemDefaultsQoS().best_effort());
+        itinerary_qos);
 
       erase_pub = node.create_publisher<Erase>(
         ItineraryEraseTopicName,
-        rclcpp::SystemDefaultsQoS().best_effort());
+        itinerary_qos);
 
       clear_pub = node.create_publisher<Clear>(
         ItineraryClearTopicName,
-        rclcpp::SystemDefaultsQoS().best_effort());
+        itinerary_qos);
 
       context = node.get_node_options().context();
 
@@ -206,6 +217,14 @@ public:
 
       unregister_client =
         node.create_client<Unregister>(UnregisterParticipantSrvName);
+
+      fail_over_event_sub = node.create_subscription<FailOverEvent>(
+        rmf_traffic_ros2::FailOverEventTopicName,
+        rclcpp::SystemDefaultsQoS(),
+        [&]([[maybe_unused]] const FailOverEvent::SharedPtr msg)
+        {
+          reconnect_services(node);
+        });
     }
 
     void set(
@@ -336,10 +355,22 @@ public:
           }
         });
     }
+
+    void reconnect_services(rclcpp::Node& node)
+    {
+      RCLCPP_INFO(
+        node.get_logger(),
+        "Reconnecting services for Writer::Transport");
+      // Deleting the old services will shut them down
+      register_client =
+        node.create_client<Register>(RegisterParticipantSrvName);
+      unregister_client =
+        node.create_client<Unregister>(UnregisterParticipantSrvName);
+    }
   };
 
   Implementation(rclcpp::Node& node)
-    : transport(std::make_shared<Transport>(node))
+  : transport(std::make_shared<Transport>(node))
   {
     // Do nothing
   }
