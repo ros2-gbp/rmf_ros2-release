@@ -1,0 +1,12 @@
+Source: ros-galactic-rmf-traffic-ros2
+Section: misc
+Priority: optional
+Maintainer: Grey <grey@openrobotics.org>
+Build-Depends: debhelper (>= 9.0.0), libeigen3-dev, libyaml-cpp-dev, ros-galactic-ament-cmake, ros-galactic-ament-cmake-catch2, ros-galactic-rclcpp, ros-galactic-rmf-cmake-uncrustify, ros-galactic-rmf-fleet-msgs, ros-galactic-rmf-traffic, ros-galactic-rmf-traffic-msgs, ros-galactic-rmf-utils, ros-galactic-ros-workspace
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-galactic-rmf-traffic-ros2
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libyaml-cpp-dev, ros-galactic-rclcpp, ros-galactic-rmf-fleet-msgs, ros-galactic-rmf-traffic, ros-galactic-rmf-traffic-msgs, ros-galactic-rmf-utils, ros-galactic-ros-workspace
+Description: A package containing messages used by the RMF traffic management system.
