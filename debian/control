@@ -1,0 +1,12 @@
+Source: ros-galactic-rmf-fleet-adapter
+Section: misc
+Priority: optional
+Maintainer: Grey <grey@openrobotics.org>
+Build-Depends: debhelper (>= 9.0.0), libeigen3-dev, libyaml-cpp-dev, ros-galactic-ament-cmake, ros-galactic-ament-cmake-catch2, ros-galactic-rclcpp, ros-galactic-rclcpp-components, ros-galactic-rmf-battery, ros-galactic-rmf-cmake-uncrustify, ros-galactic-rmf-dispenser-msgs, ros-galactic-rmf-door-msgs, ros-galactic-rmf-fleet-msgs, ros-galactic-rmf-ingestor-msgs, ros-galactic-rmf-lift-msgs, ros-galactic-rmf-task, ros-galactic-rmf-task-msgs, ros-galactic-rmf-traffic, ros-galactic-rmf-traffic-ros2, ros-galactic-rmf-utils, ros-galactic-std-msgs, ros-galactic-ros-workspace
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-galactic-rmf-fleet-adapter
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-galactic-rclcpp, ros-galactic-rclcpp-components, ros-galactic-rmf-battery, ros-galactic-rmf-dispenser-msgs, ros-galactic-rmf-door-msgs, ros-galactic-rmf-fleet-msgs, ros-galactic-rmf-ingestor-msgs, ros-galactic-rmf-lift-msgs, ros-galactic-rmf-task, ros-galactic-rmf-task-msgs, ros-galactic-rmf-traffic, ros-galactic-rmf-traffic-ros2, ros-galactic-rmf-utils, ros-galactic-std-msgs, ros-galactic-ros-workspace
+Description: Fleet Adapter package for RMF fleets.
