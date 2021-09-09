@@ -1,0 +1,12 @@
+Source: ros-galactic-rmf-fleet-adapter-python
+Section: misc
+Priority: optional
+Maintainer: methylDragon <methylDragon@gmail.com>
+Build-Depends: debhelper (>= 9.0.0), ros-galactic-ament-cmake-pytest, ros-galactic-pybind11-vendor, ros-galactic-rclpy, ros-galactic-rmf-fleet-adapter, ros-galactic-ros-workspace
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-galactic-rmf-fleet-adapter-python
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-galactic-pybind11-vendor, ros-galactic-rclpy, ros-galactic-rmf-fleet-adapter, ros-galactic-ros-workspace
+Description: Python bindings for the rmf_fleet_adapter
