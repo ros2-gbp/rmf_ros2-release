@@ -1,0 +1,12 @@
+Source: ros-foxy-rmf-task-ros2
+Section: misc
+Priority: optional
+Maintainer: youliang <youliang@openrobotics.org>
+Build-Depends: debhelper (>= 9.0.0), libeigen3-dev, ros-foxy-ament-cmake, ros-foxy-ament-cmake-catch2, ros-foxy-rclcpp, ros-foxy-rmf-cmake-uncrustify, ros-foxy-rmf-task-msgs, ros-foxy-rmf-traffic, ros-foxy-rmf-traffic-ros2, ros-foxy-rmf-utils, ros-foxy-ros-workspace
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-foxy-rmf-task-ros2
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-foxy-rclcpp, ros-foxy-rmf-task-msgs, ros-foxy-rmf-traffic, ros-foxy-rmf-traffic-ros2, ros-foxy-rmf-utils, ros-foxy-ros-workspace
+Description: A package managing the dispatching of tasks in RMF system.
