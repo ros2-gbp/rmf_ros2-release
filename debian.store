@@ -1,1 +1,1 @@
-{"base": "713512f", "parent": "debian/rolling/rmf_fleet_adapter", "previous": "d23725d", "trim": "", "trimbase": ""}
+{"base": "bef26f5", "parent": "debian/humble/rmf_fleet_adapter", "previous": "75e32cb", "trim": "", "trimbase": ""}
