@@ -20,7 +20,6 @@
 
 #include <rmf_traffic/schedule/Writer.hpp>
 #include <rmf_traffic/schedule/Participant.hpp>
-#include <rmf_traffic_msgs/msg/schedule_writer_item.hpp>
 
 #include <rclcpp/node.hpp>
 
@@ -39,8 +38,11 @@ public:
   /// members of the Node.
   ///
   /// \param[in] node
-  ///   The node that will manage the subscriptions of this writer
-  static std::shared_ptr<Writer> make(rclcpp::Node& node);
+  ///   The node that will manage the subscriptions of this writer. This will be
+  ///   held as a `std::weak_ptr<rclcpp::Node>` so it is okay to store the
+  ///   writer inside the node itself.
+  static std::shared_ptr<Writer> make(
+    const std::shared_ptr<rclcpp::Node>& node);
 
   /// Returns true if all the services needed by this writer are ready.
   bool ready() const;
@@ -83,21 +85,13 @@ public:
 
   class Implementation;
 private:
-  Writer(rclcpp::Node& node);
+  Writer();
   rmf_utils::unique_impl_ptr<Implementation> _pimpl;
 };
 
 using WriterPtr = std::shared_ptr<Writer>;
 
 } // namespace schedule
-
-//==============================================================================
-rmf_traffic::schedule::Writer::Input convert(
-  const std::vector<rmf_traffic_msgs::msg::ScheduleWriterItem>& from);
-
-//==============================================================================
-std::vector<rmf_traffic_msgs::msg::ScheduleWriterItem> convert(
-  const rmf_traffic::schedule::Writer::Input& from);
 
 } // namespace rmf_traffic_ros2
 

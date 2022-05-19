@@ -1,5 +1,14 @@
 ## Changelog for package rmf_traffic_ros2
 
+2.0.0 (2022-03-18)
+------------------
+* Update to the traffic dependency system: [#188](https://github.com/open-rmf/rmf_ros2/pull/188)
+
+1.5.0 (2022-02-14)
+------------------
+* Allow participants to sync up with remote databases when discrepancies arise [#145](https://github.com/open-rmf/rmf_ros2/pull/142)
+* Support for geojson graphs [#142](https://github.com/open-rmf/rmf_ros2/pull/142)
+
 1.4.0 (2021-09-01)
 ------------------
 * Make traffic schedule updates more efficient: [#86](https://github.com/open-rmf/rmf_ros2/pull/86)

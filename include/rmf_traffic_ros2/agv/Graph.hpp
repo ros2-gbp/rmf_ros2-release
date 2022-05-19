@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Open Source Robotics Foundation
+ * Copyright (C) 2021 Open Source Robotics Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,20 +15,14 @@
  *
 */
 
-#ifndef RMF_TRAFFIC_ROS2__SCHEDULE__INCONSISTENCIES_HPP
-#define RMF_TRAFFIC_ROS2__SCHEDULE__INCONSISTENCIES_HPP
+#include <rmf_traffic/agv/Graph.hpp>
 
-#include <rmf_traffic/schedule/Inconsistencies.hpp>
-#include <rmf_traffic_msgs/msg/schedule_inconsistency.hpp>
-#include <rmf_traffic/schedule/Itinerary.hpp>
+#include <rmf_site_map_msgs/msg/site_map.hpp>
 
 namespace rmf_traffic_ros2 {
 
 //==============================================================================
-rmf_traffic_msgs::msg::ScheduleInconsistency convert(
-  const rmf_traffic::schedule::Inconsistencies::Element& from,
-  const rmf_traffic::schedule::ProgressVersion progress_version);
+rmf_traffic::agv::Graph convert(const rmf_site_map_msgs::msg::SiteMap& from,
+  int graph_idx = 0, double wp_tolerance = 1e-3);
 
 } // namespace rmf_traffic_ros2
-
-#endif // RMF_TRAFFIC_ROS2__SCHEDULE__INCONSISTENCIES_HPP

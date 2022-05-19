@@ -27,22 +27,31 @@ class ParticipantNode : public rclcpp::Node
 {
 public:
 
-  ParticipantNode()
-  : rclcpp::Node("schedule_participant_node")
+  static std::shared_ptr<ParticipantNode> make()
   {
-    writer = rmf_traffic_ros2::schedule::Writer::make(*this);
+    auto node = std::shared_ptr<ParticipantNode>(new ParticipantNode);
+    node->writer = rmf_traffic_ros2::schedule::Writer::make(
+      node->shared_from_this());
+
+    return node;
   }
 
   rmf_traffic_ros2::schedule::WriterPtr writer;
 
   rmf_utils::optional<rmf_traffic::schedule::Participant> participant;
 
+private:
+  ParticipantNode()
+  : rclcpp::Node("schedule_participant_node")
+  {
+    // Do nothing
+  }
 };
 
 //==============================================================================
 std::shared_ptr<ParticipantNode> make_node()
 {
-  auto node = std::make_shared<ParticipantNode>();
+  auto node = ParticipantNode::make();
 
   while (!node->writer->ready())
     rclcpp::spin_some(node);
@@ -70,7 +79,7 @@ std::shared_ptr<ParticipantNode> make_node()
     {
       node->participant = std::move(participant);
       std::cout << "Sending trajectory" << std::endl;
-      node->participant->set({{"test map", std::move(t)}});
+      node->participant->set(0, {{"test map", std::move(t)}});
     });
 
   return node;
