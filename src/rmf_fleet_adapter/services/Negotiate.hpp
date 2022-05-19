@@ -34,9 +34,13 @@ public:
   using ItineraryVersion = rmf_traffic::schedule::ItineraryVersion;
   using UpdateVersion = rmf_utils::optional<ItineraryVersion>;
   using ApprovalCallback =
-    std::function<UpdateVersion(const rmf_traffic::agv::Plan&)>;
+    std::function<UpdateVersion(
+        rmf_traffic::PlanId,
+        const rmf_traffic::agv::Plan&)
+    >;
 
   Negotiate(
+    rmf_traffic::PlanId assigned_id,
     std::shared_ptr<const rmf_traffic::agv::Planner> planner,
     rmf_traffic::agv::Plan::StartSet starts,
     std::vector<rmf_traffic::agv::Plan::Goal> goals,
@@ -47,6 +51,7 @@ public:
     std::vector<rmf_traffic::Route> initial_itinerary = {});
 
   static std::shared_ptr<Negotiate> path(
+    rmf_traffic::PlanId plan_id,
     std::shared_ptr<const rmf_traffic::agv::Planner> planner,
     rmf_traffic::agv::Plan::StartSet starts,
     rmf_traffic::agv::Plan::Goal goal,
@@ -57,6 +62,7 @@ public:
     std::vector<rmf_traffic::Route> initial_itinerary = {});
 
   static std::shared_ptr<Negotiate> emergency_pullover(
+    rmf_traffic::PlanId plan_id,
     std::shared_ptr<const rmf_traffic::agv::Planner> planner,
     rmf_traffic::agv::Plan::StartSet starts,
     rmf_traffic::schedule::Negotiation::Table::ViewerPtr viewer,
@@ -87,6 +93,7 @@ private:
 
   void _resume_next();
 
+  rmf_traffic::PlanId _plan_id;
   std::shared_ptr<const rmf_traffic::agv::Planner> _planner;
   rmf_traffic::agv::Plan::StartSet _starts;
   std::vector<rmf_traffic::agv::Plan::Goal> _goals;
@@ -124,7 +131,8 @@ private:
   rmf_utils::optional<Alternatives> _alternatives;
   std::unordered_set<rmf_traffic::schedule::ParticipantId> _blockers;
 
-  std::shared_ptr<bool> _interrupted = std::make_shared<bool>(false);
+  std::shared_ptr<std::atomic_bool> _interrupted =
+    std::make_shared<std::atomic_bool>(false);
   bool _discarded = false;
 
   static constexpr std::size_t max_concurrent_jobs = 5;
