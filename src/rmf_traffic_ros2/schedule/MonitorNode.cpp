@@ -119,9 +119,9 @@ void MonitorNode::start_heartbeat_listener()
     heartbeat_sub_options);
   RCLCPP_INFO(
     get_logger(),
-    "Set up heartbeat listener on %s with liveliness lease duration of %d ms",
+    "Set up heartbeat listener on %s with liveliness lease duration of %lu ms",
     heartbeat_sub->get_topic_name(),
-    heartbeat_period);
+    heartbeat_period.count());
 }
 
 //==============================================================================
@@ -197,7 +197,7 @@ std::shared_ptr<rclcpp::Node> make_monitor_node(
   auto node = std::make_shared<MonitorNode>(callback, options);
 
   auto mirror_future = rmf_traffic_ros2::schedule::make_mirror(
-    *node, rmf_traffic::schedule::query_all());
+    node, rmf_traffic::schedule::query_all());
 
   using namespace std::chrono_literals;
 
