@@ -31,7 +31,6 @@ using rmf_door_msgs::msg::DoorState;
 using rmf_door_msgs::msg::SupervisorHeartbeat;
 using rmf_door_msgs::msg::DoorSessions;
 using rmf_door_msgs::msg::Session;
-
 namespace {
 struct TestData
 {
@@ -40,7 +39,7 @@ struct TestData
   std::list<DoorRequest::UniquePtr> received_requests;
 
   std::condition_variable status_updates_cv;
-  std::list<Task::StatusMsg> status_updates;
+  std::list<LegacyTask::StatusMsg> status_updates;
 
   std::optional<uint32_t> last_state_value() const
   {
@@ -55,12 +54,17 @@ struct TestData
 SCENARIO_METHOD(MockAdapterFixture, "door close phase", "[phases]")
 {
   const auto test = std::make_shared<TestData>();
+  auto w_test = std::weak_ptr(test);
   auto rcl_subscription =
     data->adapter->node()->create_subscription<DoorRequest>(
     AdapterDoorRequestTopicName,
     10,
-    [test](DoorRequest::UniquePtr door_request)
+    [w_test](DoorRequest::UniquePtr door_request)
     {
+      auto test = w_test.lock();
+      if (!test)
+        return;
+
       std::unique_lock<std::mutex> lk(test->m);
       test->received_requests.emplace_back(std::move(door_request));
       test->received_requests_cv.notify_all();
@@ -81,8 +85,12 @@ SCENARIO_METHOD(MockAdapterFixture, "door close phase", "[phases]")
   WHEN("it is started")
   {
     rmf_rxcpp::subscription_guard sub = active_phase->observe().subscribe(
-      [test](const auto& status)
+      [w_test](const auto& status)
       {
+        auto test = w_test.lock();
+        if (!test)
+          return;
+
         std::unique_lock<std::mutex> lk(test->m);
         test->status_updates.emplace_back(status);
         test->status_updates_cv.notify_all();
@@ -117,12 +125,32 @@ SCENARIO_METHOD(MockAdapterFixture, "door close phase", "[phases]")
 
     auto door_state_pub = data->ros_node->create_publisher<DoorState>(
       DoorStateTopicName, 10);
+    auto w_door_state_pub =
+      std::weak_ptr<rclcpp::Publisher<DoorState>>(door_state_pub);
+
     auto heartbeat_pub = data->ros_node->create_publisher<SupervisorHeartbeat>(
       DoorSupervisorHeartbeatTopicName, 10);
+    auto w_heartbeat_pub =
+      std::weak_ptr<rclcpp::Publisher<SupervisorHeartbeat>>(heartbeat_pub);
 
     auto publish_door_state =
-      [test, node = data->ros_node, door_name, door_state_pub](uint32_t mode)
+      [w_test, w_node =
+        std::weak_ptr<rclcpp::Node>(data->ros_node),
+        door_name,
+        w_door_state_pub](uint32_t mode)
       {
+        auto test = w_test.lock();
+        if (!test)
+          return;
+
+        auto node = w_node.lock();
+        if (!node)
+          return;
+
+        auto door_state_pub = w_door_state_pub.lock();
+        if (!door_state_pub)
+          return;
+
         DoorState door_state;
         door_state.door_name = door_name;
         door_state.door_time = node->now();
@@ -131,8 +159,16 @@ SCENARIO_METHOD(MockAdapterFixture, "door close phase", "[phases]")
       };
 
     auto publish_heartbeat_with_session =
-      [test, request_id, door_name, heartbeat_pub]()
+      [w_test, request_id, door_name, w_heartbeat_pub]()
       {
+        auto test = w_test.lock();
+        if (!test)
+          return;
+
+        auto heartbeat_pub = w_heartbeat_pub.lock();
+        if (!heartbeat_pub)
+          return;
+
         Session session;
         session.requester_id = request_id;
         DoorSessions door_sessions;
@@ -143,18 +179,22 @@ SCENARIO_METHOD(MockAdapterFixture, "door close phase", "[phases]")
         heartbeat_pub->publish(heartbeat);
       };
 
-    auto publish_empty_heartbeat = [heartbeat_pub]()
+    auto publish_empty_heartbeat = [w_heartbeat_pub]()
       {
+        auto heartbeat_pub = w_heartbeat_pub.lock();
+        if (!heartbeat_pub)
+          return;
+
         heartbeat_pub->publish(SupervisorHeartbeat());
       };
 
     AND_WHEN("door state is closed and supervisor do not have session")
     {
       rmf_rxcpp::subscription_guard sub2 =
-        rxcpp::observable<>::interval(std::chrono::milliseconds(1))
+        rxcpp::observable<>::interval(std::chrono::milliseconds(100))
         .subscribe_on(rxcpp::observe_on_new_thread())
         .subscribe(
-        [test, publish_door_state, publish_empty_heartbeat](const auto&)
+        [publish_door_state, publish_empty_heartbeat](const auto&)
         {
           publish_door_state(DoorMode::MODE_CLOSED);
           publish_empty_heartbeat();
@@ -164,10 +204,10 @@ SCENARIO_METHOD(MockAdapterFixture, "door close phase", "[phases]")
       {
         std::unique_lock<std::mutex> lk(test->m);
         bool completed = test->status_updates_cv.wait_for(
-          lk, std::chrono::milliseconds(10),
+          lk, std::chrono::milliseconds(1000),
           [test]()
           {
-            return test->last_state_value() == Task::StatusMsg::STATE_COMPLETED;
+            return test->last_state_value() == LegacyTask::StatusMsg::STATE_COMPLETED;
           });
         CHECK(completed);
       }
@@ -176,7 +216,7 @@ SCENARIO_METHOD(MockAdapterFixture, "door close phase", "[phases]")
     AND_WHEN("door state is open and supervisor do not have session")
     {
       rmf_rxcpp::subscription_guard sub2 =
-        rxcpp::observable<>::interval(std::chrono::milliseconds(1))
+        rxcpp::observable<>::interval(std::chrono::milliseconds(100))
         .subscribe_on(rxcpp::observe_on_new_thread())
         .subscribe([publish_door_state, publish_empty_heartbeat](const auto&)
           {
@@ -188,9 +228,9 @@ SCENARIO_METHOD(MockAdapterFixture, "door close phase", "[phases]")
       {
         std::unique_lock<std::mutex> lk(test->m);
         bool completed = test->status_updates_cv.wait_for(
-          lk, std::chrono::milliseconds(10), [test]()
+          lk, std::chrono::milliseconds(1000), [test]()
           {
-            return test->last_state_value() == Task::StatusMsg::STATE_COMPLETED;
+            return test->last_state_value() == LegacyTask::StatusMsg::STATE_COMPLETED;
           });
         CHECK(completed);
       }
@@ -199,7 +239,7 @@ SCENARIO_METHOD(MockAdapterFixture, "door close phase", "[phases]")
     AND_WHEN("door state is closed and supervisor has session")
     {
       rmf_rxcpp::subscription_guard sub2 =
-        rxcpp::observable<>::interval(std::chrono::milliseconds(1))
+        rxcpp::observable<>::interval(std::chrono::milliseconds(100))
         .subscribe_on(rxcpp::observe_on_new_thread())
         .subscribe(
         [publish_door_state, publish_heartbeat_with_session](const auto&)
@@ -212,9 +252,9 @@ SCENARIO_METHOD(MockAdapterFixture, "door close phase", "[phases]")
       {
         std::unique_lock<std::mutex> lk(test->m);
         bool completed = test->status_updates_cv.wait_for(
-          lk, std::chrono::milliseconds(10), [test]()
+          lk, std::chrono::milliseconds(1000), [test]()
           {
-            return test->last_state_value() == Task::StatusMsg::STATE_COMPLETED;
+            return test->last_state_value() == LegacyTask::StatusMsg::STATE_COMPLETED;
           });
         CHECK(!completed);
       }
@@ -227,11 +267,11 @@ SCENARIO_METHOD(MockAdapterFixture, "door close phase", "[phases]")
 
       bool completed =
         test->status_updates_cv.wait_for(
-        lk, std::chrono::milliseconds(10), [test]()
+        lk, std::chrono::milliseconds(1000), [test]()
         {
           for (const auto& status : test->status_updates)
           {
-            if (status.state == Task::StatusMsg::STATE_COMPLETED)
+            if (status.state == LegacyTask::StatusMsg::STATE_COMPLETED)
               return true;
           }
           test->status_updates.clear();
@@ -241,7 +281,6 @@ SCENARIO_METHOD(MockAdapterFixture, "door close phase", "[phases]")
     }
   }
 }
-
 } // namespace test
 } // namespace phases
 } // namespace rmf_fleet_adapter
