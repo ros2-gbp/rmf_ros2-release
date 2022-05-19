@@ -2,7 +2,6 @@
 
 import rclpy
 import time
-import json
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 
@@ -12,30 +11,19 @@ import rmf_adapter.geometry as geometry
 import rmf_adapter.graph as graph
 import rmf_adapter.battery as battery
 import rmf_adapter.plan as plan
-import rmf_adapter.type as Type
-import rmf_adapter.schedule as schedule
-
-# Deps for rmf_msg observer
-import asyncio
-import threading
-
-from itertools import groupby
 
 from test_utils import MockRobotCommand
-from test_utils import MockDispenser, MockIngestor
-from test_utils import task_state_observer_fn
 
 from functools import partial
 
-test_task_id = 'delivery.direct_dispatch.001'  # aka task_id
+
+test_task_id = 'patrol.direct_dispatch.001'  # aka task_id
 map_name = "test_map"
 fleet_name = "test_fleet"
 
-pickup_name = "pickup"
-dropoff_name = "dropoff"
-
-dispenser_name = "mock_dispenser"
-ingestor_name = "mock_ingestor"
+start_name = "start_wp"  # 7
+finish_name = "finish_wp"  # 10
+loop_count = 2
 rmf_server_uri = "ws://localhost:7878"  # random port
 
 
@@ -62,11 +50,11 @@ def main():
     test_graph.add_waypoint(map_name, [10.0, 0.0])  # 7
     test_graph.add_waypoint(map_name, [0.0, 5.0])  # 8
     test_graph.add_waypoint(map_name, [5.0, 5.0]).set_holding_point(True)  # 9
-    test_graph.add_waypoint(map_name, [0.0, 10.0]).set_charger(True)  # 10
+    test_graph.add_waypoint(map_name, [0.0, 10.0]).set_holding_point(
+        True).set_charger(True)  # 10
 
     assert test_graph.get_waypoint(2).holding_point
     assert test_graph.get_waypoint(9).holding_point
-    assert not test_graph.get_waypoint(10).holding_point
 
     test_graph_legend = \
         """
@@ -111,11 +99,11 @@ def main():
 
     assert test_graph.num_lanes == 24
 
-    test_graph.add_key(pickup_name, 7)
-    test_graph.add_key(dropoff_name, 10)
+    test_graph.add_key(start_name, 7)
+    test_graph.add_key(finish_name, 10)
 
-    assert len(test_graph.keys) == 2 and pickup_name in test_graph.keys \
-        and dropoff_name in test_graph.keys
+    assert len(test_graph.keys) == 2 and start_name in test_graph.keys \
+        and finish_name in test_graph.keys
 
     # INIT FLEET ==============================================================
     profile = traits.Profile(geometry.make_final_convex_circle(1.0))
@@ -123,26 +111,20 @@ def main():
                                         angular=traits.Limits(1.0, 0.45),
                                         profile=profile)
 
-    # Manages delivery or loop requests
-    adapter = adpt.MockAdapter("TestDeliveryAdapter")
+    # Manages loop requests
+    adapter = adpt.MockAdapter("TestLoopAdapter")
     fleet = adapter.add_fleet(
         fleet_name, robot_traits, test_graph, rmf_server_uri)
 
-    def pickup_req_cb(json_desc):
+    def patrol_req_cb(json_desc):
         confirmation = adpt.fleet_update_handle.Confirmation()
         confirmation.accept()
-        print(f" accepted pickup req: {json_desc}")
+        print(f" accepted patrol req: {json_desc}")
         return confirmation
 
-    def dropoff_req_cb(json_desc):
-        confirmation = adpt.fleet_update_handle.Confirmation()
-        confirmation.accept()
-        print(f" accepted dropoff req: {json_desc}")
-        return confirmation
-
-    # Callback when a delivery request is received
-    fleet.consider_delivery_requests(
-        pickup_req_cb, dropoff_req_cb)
+    # Callback when a patrol request is received
+    fleet.consider_patrol_requests(
+        patrol_req_cb)
 
     # Set fleet battery profile
     battery_sys = battery.BatterySystem.make(24.0, 40.0, 8.8)
@@ -157,7 +139,7 @@ def main():
     b_success = fleet.set_task_planner_params(
         battery_sys, motion_sink, ambient_sink, tool_sink, 0.2, 1.0, False)
 
-    assert b_success, "set battery param failed"
+    assert b_success, "set task planner params failed"
 
     cmd_node = Node("RobotCommandHandle")
 
@@ -188,113 +170,38 @@ def main():
                     starts,
                     partial(updater_inserter, robot_cmd))
 
-    # INIT DISPENSERS =========================================================
-    dispenser = MockDispenser(dispenser_name)
-    ingestor = MockIngestor(ingestor_name)
-
     # FINAL PREP ==============================================================
     rclpy_executor = SingleThreadedExecutor()
     rclpy_executor.add_node(cmd_node)
-    rclpy_executor.add_node(dispenser)
-    rclpy_executor.add_node(ingestor)
-    # rclpy_executor.add_node(observer)
 
     # GO! =====================================================================
     adapter.start()
 
-    print("\n")
-    print("# SENDING SINGLE DELIVERY REQUEST ################################")
-    print(test_graph_vis)
+    # Wait a moment for the updater to be created
+    time.sleep(0.5)
+    robot_cmd.updater.unstable_declare_holding(
+        map_name,
+        [1.0, 2.0, 3.0],
+        4.0
+    )
 
-    dispenser.reset()
-    ingestor.reset()
+    # Wait a moment for the holding declaration to be processed
+    time.sleep(0.5)
+    participant = robot_cmd.updater.unstable_get_participant()
+    itinerary = participant.get_itinerary()
+    assert len(itinerary) > 0
+    for route in itinerary:
+        assert route.map == map_name
+        assert route.trajectory.size() == 2
+        for i in range(route.trajectory.size()):
+            assert route.trajectory.position(i)[0] == 1.0
+            assert route.trajectory.position(i)[1] == 2.0
+            assert route.trajectory.position(i)[2] == 3.0
 
-    # INIT TASK STATE OBSERVER ==============================================
-    # TODO(YL): Cleanup rmf_msg_observer impl
-    print("spawn observer thread")
-    fut = asyncio.Future()
-    observer_th = threading.Thread(
-        target=task_state_observer_fn, args=(fut, test_task_id))
-    observer_th.start()
-
-    # TODO(YL): import rmf_api_msgs task schema pydantic here
-    task_json_obj = {
-        "category": "delivery",
-        # "unix_millis_earliest_start_time": 0,
-        "description": {
-            "pickup": {
-                "place": pickup_name,
-                "handler": dispenser_name,
-                "payload": []
-            },
-            "dropoff": {
-                "place": dropoff_name,
-                "handler": ingestor_name,
-                "payload": []
-            }
-        }
-    }
-    adapter.dispatch_task(test_task_id, task_json_obj)
-    print("Done!")
-
-    rclpy_executor.spin_once(1)
-
-    # check observer completion and timeout
-    start_time = time.time()
-    for i in range(1000):
-        if ((time.time() - start_time) > 15):
-            if fut.done():
-                break
-            fut.set_result(True) # Properly end observer thread
-            assert False, "Timeout, target task is not Completed."
-
-        if fut.done():
-            print("Tasks Complete.")
-            break
-        rclpy_executor.spin_once(1)
-        time.sleep(0.2)
-
-    observer_th.join()
-
-    print("\n== DEBUG TASK REPORT ==")
-    print("Visited waypoints:", robot_cmd.visited_waypoints)
-
-    # Filter the wps, this will remove consecutive duplicated waypoints
-    filtered_visited_wps = [x[0] for x in groupby(robot_cmd.visited_waypoints)]
-    expected_route = [0, 5, 6, 7, 6, 5, 8, 10]
-    assert filtered_visited_wps == expected_route, (
-        f"Robot did not take the expected route")
-
-    # check if unstable partcipant works
-    # this is helpful for to update the robot when it is
-    print("Update a custom itinerary to fleet adapter")
-    traj = schedule.make_trajectory(
-        robot_traits,
-        adapter.now(),
-        [[3, 0, 0], [1, 1, 0], [2, 1, 0]])
-    route = schedule.Route("test_map", traj)
-
-    participant = robot_cmd.updater.get_unstable_participant()
-    routeid = participant.last_route_id
-    participant.set_itinerary([route])
-    new_routeid = participant.last_route_id
-    print(f"Previous route id: {routeid} , new route id: {new_routeid}")
-    assert routeid != new_routeid
-
-    # TODO(YL) There's an issue with during shutdown of the adapter, occurs
-    # when set_itinerary() function above is used. Similarly with a non-mock
-    # adpater, will need to address this in near future
-    print("\n~ Shutting Down everything ~")
-
-    cmd_node.destroy_node()
-    dispenser.destroy_node()
-    ingestor.destroy_node()
-
-    robot_cmd.stop()
-    adapter.stop()
-    rclpy_executor.shutdown()
-    rclpy.shutdown()
-
+    # Note that this is not a very reliable test because the
+    # unstable_declare_holding will be competing with the responsive waiting
+    # behavior of the fleet adapter. Race conditions in that contention could
+    # cause this test to fail.
 
 if __name__ == "__main__":
     main()
