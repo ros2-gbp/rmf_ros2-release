@@ -1,7 +1,8 @@
 ## Changelog for package rmf_task_ros2
 
-2.1.0 (2022-09-29)
+2.1.0 (2022-10-03)
 ------------------
+* Change default task auction evaluator to `QuickestFinishEvaluator`: [#211](https://github.com/open-rmf/rmf_ros2/pull/211)
 * ws broadcast client in dispatcher node [#212](https://github.com/open-rmf/rmf_ros2/pull/212)
 * create unique task_id with timestamp [#223](https://github.com/open-rmf/rmf_ros2/pull/223)
 
