@@ -25,13 +25,13 @@ namespace rmf_traffic_ros2 {
 const std::string Prefix = "rmf_traffic/";
 
 const std::string HeartbeatTopicName = Prefix + "heartbeat";
-const std::string FailOverEventTopicName = Prefix + "fail_over_event";
+const std::string ScheduleStartupTopicName = Prefix + "schedule_startup";
 const std::string QueriesInfoTopicName = Prefix + "registered_queries";
 
 const std::string ItinerarySetTopicName = Prefix + "itinerary_set";
 const std::string ItineraryExtendTopicName = Prefix + "itinerary_extend";
 const std::string ItineraryDelayTopicName = Prefix + "itinerary_delay";
-const std::string ItineraryEraseTopicName = Prefix + "itinerary_erase";
+const std::string ItineraryReachedTopicName = Prefix + "itinerary_reached";
 const std::string ItineraryClearTopicName = Prefix + "itinerary_clear";
 const std::string RegisterParticipantSrvName = Prefix + "register_participant";
 const std::string UnregisterParticipantSrvName = Prefix +
@@ -58,6 +58,10 @@ const std::string NegotiationForfeitTopicName = Prefix +
   "negotiation_forfeit";
 const std::string NegotiationConclusionTopicName = Prefix +
   "negotiation_conclusion";
+const std::string NegotiationStatesTopicName = Prefix +
+  "negotiation_states";
+const std::string NegotiationStatusesTopicName = Prefix +
+  "negotiation_statuses";
 
 const std::string BlockadeCancelTopicName = Prefix +
   "blockade_cancel";
