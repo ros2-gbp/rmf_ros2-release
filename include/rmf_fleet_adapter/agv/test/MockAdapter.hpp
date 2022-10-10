@@ -18,7 +18,6 @@
 #include <memory>
 
 #include <rmf_fleet_adapter/agv/FleetUpdateHandle.hpp>
-#include <rmf_fleet_adapter/agv/TrafficLight.hpp>
 
 #include <rclcpp/node.hpp>
 
@@ -47,20 +46,16 @@ public:
   std::shared_ptr<FleetUpdateHandle> add_fleet(
     const std::string& fleet_name,
     rmf_traffic::agv::VehicleTraits traits,
-    rmf_traffic::agv::Graph navigation_graph);
-
-  TrafficLight::UpdateHandlePtr add_traffic_light(
-    std::shared_ptr<TrafficLight::CommandHandle> command,
-    const std::string& fleet_name,
-    const std::string& robot_name,
-    rmf_traffic::agv::VehicleTraits traits,
-    rmf_traffic::Profile profile);
+    rmf_traffic::agv::Graph navigation_graph,
+    std::optional<std::string> server_uri = std::nullopt);
 
   /// Get the rclcpp Node for this adapter
   std::shared_ptr<rclcpp::Node> node();
 
   /// const-qualified node()
   std::shared_ptr<const rclcpp::Node> node() const;
+
+  void add_secondary_node(std::shared_ptr<rclcpp::Node> secondary_node);
 
   /// Start spinning this adapter
   void start();
@@ -69,7 +64,7 @@ public:
   void stop();
 
   /// Submit a task request
-  void dispatch_task(const rmf_task_msgs::msg::TaskProfile& profile);
+  void dispatch_task(std::string task_id, const nlohmann::json& request);
 
   ~MockAdapter();
 
