@@ -1,5 +1,35 @@
 ## Changelog for package rmf_fleet_adapter
 
+2.1.2 (2022-10-10)
+------------------
+
+2.1.0 (2022-10-03)
+------------------
+* Add API to update speed limits for lanes: [#217](https://github.com/open-rmf/rmf_ros2/pull/217)
+* Make async behaviors more robust: [#228](https://github.com/open-rmf/rmf_ros2/pull/228)
+* Allow fleet adapters to change schedule participant profiles: [#229](https://github.com/open-rmf/rmf_ros2/pull/229)
+* Allow robots to be decommissioned from the task dispatch system: [#233](https://github.com/open-rmf/rmf_ros2/pull/233)
+* Allow manual toggling of stubborn negotiation: [#196](https://github.com/open-rmf/rmf_ros2/pull/196)
+* Allow users to specify a custom update listener: [#198](https://github.com/open-rmf/rmf_ros2/pull/198)
+* Introduce `WaitUntil` activity and use it in the `ResponsiveWait`: [#199](https://github.com/open-rmf/rmf_ros2/pull/199)
+* Better support for patrol behaviors: [#205](https://github.com/open-rmf/rmf_ros2/pull/205)
+* Allow `ResponsiveWait` to be enabled and disabled: [#209](https://github.com/open-rmf/rmf_ros2/pull/209)
+* Publish the navigation graph of the fleet adapter: [#207](https://github.com/open-rmf/rmf_ros2/pull/207)
+* Allow robot status to be overridden by the user: [#191](https://github.com/open-rmf/rmf_ros2/pull/191)
+* Add API to report status for `perform_action`: [#190](https://github.com/open-rmf/rmf_ros2/pull/190)
+* Add APIs for cancelling and killing tasks from the `RobotUpdateHandle`: [#205](https://github.com/open-rmf/rmf_ros2/pull/205)
+* Add a WaitUntil event and use it for ResponsiveWait: [#199](https://github.com/open-rmf/rmf_ros2/pull/199)
+
+2.0.0 (2022-03-18)
+------------------
+* Update to traffic dependency system: [#188](https://github.com/open-rmf/rmf_ros2/pull/188)
+
+1.5.0 (2022-02-14)
+------------------
+* Support flexible task definitions [#168](https://github.com/open-rmf/rmf_ros2/pull/168)
+* Add lane speed limit to graph parsing function [#124](https://github.com/open-rmf/rmf_ros2/pull/124)
+* Support for geojson graphs [#142](https://github.com/open-rmf/rmf_ros2/pull/142)
+
 1.4.0 (2021-09-01)
 ------------------
 * Add read_only_blockade adapter: [#110](https://github.com/open-rmf/rmf_ros2/pull/110)

@@ -25,31 +25,30 @@ namespace phases {
 MoveRobot::ActivePhase::ActivePhase(
   agv::RobotContextPtr context,
   std::vector<rmf_traffic::agv::Plan::Waypoint> waypoints,
+  rmf_traffic::PlanId plan_id,
   std::optional<rmf_traffic::Duration> tail_period)
 : _context{std::move(context)},
   _tail_period(tail_period)
 {
   std::ostringstream oss;
-  oss << "Moving [" << _context->requester_id() << "]: ("
-      << waypoints.front().position().transpose()
-      << ") -> (" << waypoints.back().position().transpose() << ")";
+  const auto dest = destination(
+    waypoints.back(), _context->planner()->get_configuration().graph());
+  oss << "Moving to " << dest;
   _description = oss.str();
 
   _action = std::make_shared<MoveRobot::Action>(
-    _context, waypoints, _tail_period);
+    _context, waypoints, plan_id, _tail_period);
 
-  auto job = rmf_rxcpp::make_job<Task::StatusMsg>(_action);
+  auto job = rmf_rxcpp::make_job<LegacyTask::StatusMsg>(_action);
 
   _obs = make_cancellable(job, _cancel_subject.get_observable())
-    .lift<Task::StatusMsg>(grab_while_active())
+    .lift<LegacyTask::StatusMsg>(grab_while_active())
     .observe_on(rxcpp::identity_same_worker(_context->worker()));
-
-  _context->current_mode(rmf_fleet_msgs::msg::RobotMode::MODE_MOVING);
 }
 
 //==============================================================================
-const rxcpp::observable<Task::StatusMsg>& MoveRobot::ActivePhase::observe()
-const
+const rxcpp::observable<LegacyTask::StatusMsg>&
+MoveRobot::ActivePhase::observe() const
 {
   return _obs;
 }
@@ -84,22 +83,25 @@ const std::string& MoveRobot::ActivePhase::description() const
 MoveRobot::PendingPhase::PendingPhase(
   agv::RobotContextPtr context,
   std::vector<rmf_traffic::agv::Plan::Waypoint> waypoints,
+  rmf_traffic::PlanId plan_id,
   std::optional<rmf_traffic::Duration> tail_period)
 : _context{std::move(context)},
   _waypoints{std::move(waypoints)},
+  _plan_id{plan_id},
   _tail_period(tail_period)
 {
   std::ostringstream oss;
-  oss << "Move [" << _context->requester_id() << "] to ("
-      << _waypoints.back().position().transpose() << ")";
+  const auto dest = destination(
+    _waypoints.back(), _context->planner()->get_configuration().graph());
+  oss << "Move to " << dest;
   _description = oss.str();
 }
 
 //==============================================================================
-std::shared_ptr<Task::ActivePhase> MoveRobot::PendingPhase::begin()
+std::shared_ptr<LegacyTask::ActivePhase> MoveRobot::PendingPhase::begin()
 {
   return std::make_shared<MoveRobot::ActivePhase>(
-    _context, _waypoints, _tail_period);
+    _context, _waypoints, _plan_id, _tail_period);
 }
 
 //==============================================================================
@@ -119,9 +121,11 @@ const std::string& MoveRobot::PendingPhase::description() const
 MoveRobot::Action::Action(
   agv::RobotContextPtr& context,
   std::vector<rmf_traffic::agv::Plan::Waypoint>& waypoints,
+  rmf_traffic::PlanId plan_id,
   std::optional<rmf_traffic::Duration> tail_period)
 : _context{context},
   _waypoints{waypoints},
+  _plan_id{plan_id},
   _tail_period{tail_period}
 {
   // no op
