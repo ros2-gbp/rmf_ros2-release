@@ -35,12 +35,10 @@ class DelayedQueryBroadcastScheduleNode
 {
 public:
   DelayedQueryBroadcastScheduleNode(
-    NodeVersion node_version_,
     std::shared_ptr<rmf_traffic::schedule::Database> database_,
     QueryMap registered_queries_,
     const rclcpp::NodeOptions& options)
     : ScheduleNode(
-        node_version_,
         database_,
         registered_queries_,
         options)
@@ -89,7 +87,6 @@ public:
 
     auto node =
       std::make_shared<DelayedQueryBroadcastScheduleNode>(
-        1, // Bump the node version by one
         database,
         registered_queries,
         rclcpp::NodeOptions());
@@ -114,7 +111,7 @@ int main(int argc, char** argv)
   node->setup();
 
   auto mirror_future = rmf_traffic_ros2::schedule::make_mirror(
-    *node, rmf_traffic::schedule::query_all());
+    node, rmf_traffic::schedule::query_all());
   using namespace std::chrono_literals;
   bool success = false;
   const auto stop_time = std::chrono::steady_clock::now() + 10s;
