@@ -69,11 +69,8 @@ public:
     rmf_utils::impl_ptr<Implementation> _pimpl;
   };
 
-  /// Get the viewer of the mirror that is being managed
-  const rmf_traffic::schedule::Viewer& viewer() const;
-
-  /// Get a stub that can take snapshots of the schedule
-  std::shared_ptr<rmf_traffic::schedule::Snappable> snapshot_handle() const;
+  /// Get an immutable view of the mirror
+  std::shared_ptr<const rmf_traffic::schedule::Mirror> view() const;
 
   /// Attempt to update this mirror immediately.
   ///
@@ -145,7 +142,8 @@ private:
 /// Creating a mirror manager involves some asynchronous service calls to
 ///
 /// \param[in] node
-///   The rclcpp node to use
+///   The rclcpp node to use. This will be stored as a weak_ptr, so it is okay
+///   to store the mirror manager inside of the node.
 ///
 /// \param[in] spacetime
 ///   The spacetime description to filter the query
@@ -155,7 +153,8 @@ private:
 ///
 // TODO(MXG): Use std::optional here instead of std::unique_ptr when C++17 can
 // be supported.
-MirrorManagerFuture make_mirror(rclcpp::Node& node,
+MirrorManagerFuture make_mirror(
+  const std::shared_ptr<rclcpp::Node>& node,
   rmf_traffic::schedule::Query query,
   MirrorManager::Options options = MirrorManager::Options());
 
