@@ -20,6 +20,8 @@
 #include <rmf_fleet_adapter/StandardNames.hpp>
 #include <rmf_traffic_ros2/StandardNames.hpp>
 
+#include <rmf_traffic_ros2/Time.hpp>
+
 namespace rmf_fleet_adapter {
 namespace agv {
 
@@ -91,6 +93,19 @@ std::shared_ptr<Node> Node::make(
     node->create_publisher<FleetState>(
     FleetStateTopicName, default_qos);
 
+  auto transient_local_qos = rclcpp::SystemDefaultsQoS()
+    .reliable()
+    .transient_local()
+    .keep_last(100);
+
+  node->_task_api_request_obs =
+    node->create_observable<ApiRequest>(
+    TaskApiRequests, transient_local_qos);
+
+  node->_task_api_response_pub =
+    node->create_publisher<ApiResponse>(
+    TaskApiResponses, transient_local_qos);
+
   return node;
 }
 
@@ -102,6 +117,21 @@ Node::Node(
 : rmf_rxcpp::Transport(std::move(worker), node_name, options)
 {
   // Do nothing
+}
+
+//==============================================================================
+std::function<rmf_traffic::Time()> Node::clock() const
+{
+  return [self = shared_from_this()]()
+    {
+      return rmf_traffic_ros2::convert(self->now());
+    };
+}
+
+//==============================================================================
+rmf_traffic::Time Node::rmf_now() const
+{
+  return rmf_traffic_ros2::convert(now());
 }
 
 //==============================================================================
@@ -185,6 +215,18 @@ auto Node::ingestor_state() const -> const IngestorStateObs&
 auto Node::fleet_state() const -> const FleetStatePub&
 {
   return _fleet_state_pub;
+}
+
+//==============================================================================
+auto Node::task_api_request() const -> const ApiRequestObs&
+{
+  return _task_api_request_obs->observe();
+}
+
+//==============================================================================
+auto Node::task_api_response() const -> const ApiResponsePub&
+{
+  return _task_api_response_pub;
 }
 
 } // namespace agv
