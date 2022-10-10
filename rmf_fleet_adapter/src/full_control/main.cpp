@@ -33,6 +33,8 @@
 #include <rmf_fleet_msgs/srv/lift_clearance.hpp>
 #include <rmf_fleet_msgs/msg/lane_request.hpp>
 #include <rmf_fleet_msgs/msg/closed_lanes.hpp>
+#include <rmf_fleet_msgs/msg/speed_limit_request.hpp>
+#include <rmf_fleet_msgs/msg/interrupt_request.hpp>
 
 // RMF Task messages
 #include <rmf_task_msgs/msg/task_type.hpp>
@@ -58,7 +60,10 @@
 #include <rmf_battery/agv/SimpleDevicePowerSink.hpp>
 
 #include <Eigen/Geometry>
+#include <nlohmann/json.hpp>
+
 #include <unordered_set>
+#include <optional>
 
 //==============================================================================
 rmf_fleet_adapter::agv::RobotUpdateHandle::Unstable::Decision
@@ -149,7 +154,8 @@ std::optional<DistanceFromGraph> distance_from_graph(
 
 //==============================================================================
 class FleetDriverRobotCommandHandle
-  : public rmf_fleet_adapter::agv::RobotCommandHandle
+  : public rmf_fleet_adapter::agv::RobotCommandHandle,
+  public std::enable_shared_from_this<FleetDriverRobotCommandHandle>
 {
 public:
 
@@ -158,6 +164,9 @@ public:
 
   using ModeRequestPub =
     rclcpp::Publisher<rmf_fleet_msgs::msg::ModeRequest>::SharedPtr;
+
+  using ActionExecution =
+    rmf_fleet_adapter::agv::RobotUpdateHandle::ActionExecution;
 
   FleetDriverRobotCommandHandle(
     rclcpp::Node& node,
@@ -213,6 +222,30 @@ public:
       location.y = p.y();
       location.yaw = p.z();
 
+      // The speed limit is set as the minimum of all the approach lanes' limits
+      std::optional<double> speed_limit = std::nullopt;
+      for (const auto& lane_idx : wp.approach_lanes())
+      {
+        const auto& lane = _travel_info.graph->get_lane(lane_idx);
+        const auto& lane_limit = lane.properties().speed_limit();
+        if (lane_limit.has_value())
+        {
+          if (speed_limit.has_value())
+            speed_limit = std::min(speed_limit.value(), lane_limit.value());
+          else
+            speed_limit = lane_limit.value();
+        }
+      }
+      if (speed_limit.has_value())
+      {
+        location.obey_approach_speed_limit = true;
+        location.approach_speed_limit = speed_limit.value();
+      }
+      else
+      {
+        location.obey_approach_speed_limit = false;
+      }
+
       // Note: if the waypoint is not on a graph index, then we'll just leave
       // the level_name blank. That information isn't likely to get used by the
       // fleet driver anyway.
@@ -231,7 +264,26 @@ public:
 
   void stop() final
   {
-    // This is currently not used by the fleet drivers
+    auto lock = _lock();
+    _clear_last_command();
+
+    if (!_last_known_state.has_value())
+    {
+      RCLCPP_WARN(
+        _node->get_logger(),
+        "Cannot ask slotcar [%s] to stop because we have never received a "
+        "state from it.",
+        _travel_info.robot_name.c_str());
+      return;
+    }
+
+    rmf_fleet_msgs::msg::Location location;
+    _current_path_request.task_id = std::to_string(++_current_task_id);
+    _current_path_request.path.clear();
+    _current_path_request.path.push_back(_last_known_state->location);
+
+    _path_requested_time = std::chrono::steady_clock::now();
+    _path_request_pub->publish(_current_path_request);
   }
 
   class DockFinder : public rmf_traffic::agv::Graph::Lane::Executor
@@ -372,13 +424,13 @@ public:
 
         RCLCPP_INFO(
           _node->get_logger(),
-          "Fleet driver [%s] reported interruption for [%s]",
+          "Fleet driver [%s] reported a need to replan for [%s]",
           _current_path_request.fleet_name.c_str(),
           _current_path_request.robot_name.c_str());
 
         _interrupted = true;
         estimate_state(_node, state.location, _travel_info);
-        return _travel_info.updater->interrupted();
+        return _travel_info.updater->replan();
       }
 
       if (state.path.empty())
@@ -440,6 +492,7 @@ public:
           _travel_info.updater->unstable().get_participant())
         {
           participant->set(
+            participant->assign_plan_id(),
             {rmf_traffic::Route{state.location.level_name, trajectory}});
           _dock_schedule_time = now;
         }
@@ -456,6 +509,33 @@ public:
   void set_updater(rmf_fleet_adapter::agv::RobotUpdateHandlePtr updater)
   {
     _travel_info.updater = std::move(updater);
+
+    bool enable_responsive_wait = true;
+    _node->get_parameter_or(
+      "enable_responsive_wait", enable_responsive_wait, true);
+    _travel_info.updater->enable_responsive_wait(enable_responsive_wait);
+
+    // Set the action_executor for the robot
+    const auto teleop_executioner =
+      [w = weak_from_this()](
+      const std::string&,
+      const nlohmann::json&,
+      ActionExecution execution)
+      {
+        // We do not do anything here. The user can can move the robot by
+        // sending PathRequest msgs. Instead we simply store the completed
+        // callback which will be called when we receive a RobotModeRequest.
+        const auto self = w.lock();
+        if (!self)
+          return;
+        self->set_action_execution(execution);
+      };
+    _travel_info.updater->set_action_executor(teleop_executioner);
+  }
+
+  rmf_fleet_adapter::agv::RobotUpdateHandlePtr get_updater()
+  {
+    return _travel_info.updater;
   }
 
   void newly_closed_lanes(const std::unordered_set<std::size_t>& closed_lanes)
@@ -539,7 +619,62 @@ public:
     }
 
     if (need_to_replan)
-      _travel_info.updater->interrupted();
+      _travel_info.updater->replan();
+  }
+
+  void set_action_execution(ActionExecution action_execution)
+  {
+    _action_execution = action_execution;
+  }
+
+  void complete_robot_action()
+  {
+    if (!_action_execution.has_value())
+      return;
+
+    _action_execution->finished();
+    _action_execution = std::nullopt;
+
+    RCLCPP_INFO(
+      _node->get_logger(),
+      "Robot [%s] has completed the action it was performing",
+      _travel_info.robot_name.c_str());
+  }
+
+  void handle_interrupt_request(
+    const rmf_fleet_msgs::msg::InterruptRequest& request)
+  {
+    const auto it = _interruptions.find(request.interrupt_id);
+    if (it == _interruptions.end())
+    {
+      if (request.type == request.TYPE_RESUME)
+        return;
+
+      _interruptions.insert(
+        {
+          request.interrupt_id,
+          _travel_info.updater->interrupt(
+            request.labels,
+            [id = request.interrupt_id, name = _travel_info.robot_name]()
+            {
+              std::cout << "[" << name << "] is interrupted for " << id
+                        << "!" << std::endl;
+            })
+        });
+
+      return;
+    }
+    else
+    {
+      if (request.type == request.TYPE_INTERRUPT)
+        return;
+
+      it->second.resume(request.labels);
+      std::cout << "Asking [" << _travel_info.robot_name << "] to resume for "
+                << request.interrupt_id << std::endl;
+
+      _interruptions.erase(it);
+    }
   }
 
 private:
@@ -561,13 +696,19 @@ private:
   RequestCompleted _dock_finished_callback;
   ModeRequestPub _mode_request_pub;
 
+  using Interruption = rmf_fleet_adapter::agv::RobotUpdateHandle::Interruption;
+  std::unordered_map<std::string, Interruption> _interruptions;
+
   uint32_t _current_task_id = 0;
 
-  std::mutex _mutex;
+  std::recursive_mutex _mutex;
 
-  std::unique_lock<std::mutex> _lock()
+  // ActionExecution for managing teleop action
+  std::optional<ActionExecution> _action_execution = std::nullopt;
+
+  std::unique_lock<std::recursive_mutex> _lock()
   {
-    std::unique_lock<std::mutex> lock(_mutex, std::defer_lock);
+    std::unique_lock<std::recursive_mutex> lock(_mutex, std::defer_lock);
     while (!lock.try_lock())
     {
       // Intentionally busy wait
@@ -591,6 +732,10 @@ using FleetDriverRobotCommandHandlePtr =
 /// This is an RAII class that keeps the connections to the fleet driver alive.
 struct Connections : public std::enable_shared_from_this<Connections>
 {
+  /// Parameter change listener
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr
+    on_set_param;
+
   /// The API for adding new robots to the adapter
   rmf_fleet_adapter::agv::FleetUpdateHandlePtr fleet;
 
@@ -615,6 +760,10 @@ struct Connections : public std::enable_shared_from_this<Connections>
   rclcpp::Publisher<rmf_fleet_msgs::msg::ModeRequest>::SharedPtr
     mode_request_pub;
 
+  /// The topic subscription for ending teleop actions
+  rclcpp::Subscription<rmf_fleet_msgs::msg::ModeRequest>::SharedPtr
+    mode_request_sub;
+
   /// The client for listening to whether there is clearance in a lift
   rclcpp::Client<rmf_fleet_msgs::srv::LiftClearance>::SharedPtr
     lift_watchdog_client;
@@ -627,12 +776,19 @@ struct Connections : public std::enable_shared_from_this<Connections>
   rclcpp::Publisher<rmf_fleet_msgs::msg::ClosedLanes>::SharedPtr
     closed_lanes_pub;
 
+  /// The topic subscription for listening for speed limit requests
+  rclcpp::Subscription<rmf_fleet_msgs::msg::SpeedLimitRequest>::SharedPtr
+    speed_limit_request_sub;
+
   /// Container for remembering which lanes are currently closed
   std::unordered_set<std::size_t> closed_lanes;
 
+  /// The topic subscription for robot interruption requests
+  rclcpp::Subscription<rmf_fleet_msgs::msg::InterruptRequest>::SharedPtr
+    interrupt_request_sub;
+
   /// The container for robot update handles
-  std::unordered_map<std::string, FleetDriverRobotCommandHandlePtr>
-  robots;
+  std::unordered_map<std::string, FleetDriverRobotCommandHandlePtr> robots;
 
   void add_robot(
     const std::string& fleet_name,
@@ -720,7 +876,7 @@ struct Connections : public std::enable_shared_from_this<Connections>
         if (connections->lift_watchdog_client)
         {
           updater->unstable().set_lift_entry_watchdog(
-            [robot_name, client = connections->lift_watchdog_client](
+            [robot_name, connections](
               const std::string& lift_name,
               auto decide)
             {
@@ -729,6 +885,16 @@ struct Connections : public std::enable_shared_from_this<Connections>
                 rmf_fleet_msgs::build<rmf_fleet_msgs::srv::LiftClearance::Request>()
                 .robot_name(robot_name)
                 .lift_name(lift_name));
+
+              const auto client = connections->lift_watchdog_client;
+              if (!client->service_is_ready())
+              {
+                RCLCPP_ERROR(
+                  connections->adapter->node()->get_logger(),
+                  "Failed to get lift clearance service");
+                decide(convert_decision(0));
+                return;
+              }
 
               client->async_send_request(
                 request,
@@ -747,10 +913,10 @@ struct Connections : public std::enable_shared_from_this<Connections>
       });
   }
 
-  std::mutex _mutex;
-  std::unique_lock<std::mutex> lock()
+  std::recursive_mutex _mutex;
+  std::unique_lock<std::recursive_mutex> lock()
   {
-    std::unique_lock<std::mutex> l(_mutex, std::defer_lock);
+    std::unique_lock<std::recursive_mutex> l(_mutex, std::defer_lock);
     while (!l.try_lock())
     {
       // Intentionally busy wait
@@ -765,8 +931,37 @@ std::shared_ptr<Connections> make_fleet(
   const rmf_fleet_adapter::agv::AdapterPtr& adapter)
 {
   const auto& node = adapter->node();
+  node->declare_parameter("enable_responsive_wait", true);
+
   std::shared_ptr<Connections> connections = std::make_shared<Connections>();
   connections->adapter = adapter;
+  connections->on_set_param =
+    node->get_node_parameters_interface()->add_on_set_parameters_callback(
+    [w = connections->weak_from_this()](
+      const std::vector<rclcpp::Parameter>& params)
+    -> rcl_interfaces::msg::SetParametersResult
+    {
+      const auto self = w.lock();
+      if (!self)
+        return rcl_interfaces::msg::SetParametersResult();
+
+      for (const auto& p : params)
+      {
+        if (p.get_name() == "enable_responsive_wait")
+        {
+          const auto value = p.as_bool();
+          for (auto& [_, cmd] : self->robots)
+          {
+            if (const auto updater = cmd->get_updater())
+              updater->enable_responsive_wait(value);
+          }
+        }
+      }
+
+      rcl_interfaces::msg::SetParametersResult r;
+      r.successful = true;
+      return r;
+    });
 
   const std::string fleet_name_param_name = "fleet_name";
   const std::string fleet_name = node->declare_parameter(
@@ -805,12 +1000,24 @@ std::shared_ptr<Connections> make_fleet(
   for (const auto& key : connections->graph->keys())
     std::cout << " -- " << key.first << std::endl;
 
+  std::optional<std::string> server_uri = std::nullopt;
+  const std::string uri =
+    node->declare_parameter("server_uri", std::string());
+  if (!uri.empty())
+  {
+    RCLCPP_INFO(
+      node->get_logger(),
+      "API server URI: [%s]", uri.c_str());
+
+    server_uri = uri;
+  }
+
   connections->fleet = adapter->add_fleet(
-    fleet_name, *connections->traits, *connections->graph);
+    fleet_name, *connections->traits, *connections->graph, server_uri);
 
   // We disable fleet state publishing for this fleet adapter because we expect
   // the fleet drivers to publish these messages.
-  connections->fleet->fleet_state_publish_period(std::nullopt);
+  connections->fleet->fleet_state_topic_publish_period(std::nullopt);
 
   connections->closed_lanes_pub =
     adapter->node()->create_publisher<rmf_fleet_msgs::msg::ClosedLanes>(
@@ -828,8 +1035,8 @@ std::shared_ptr<Connections> make_fleet(
       if (!connections)
         return;
 
-      if (request_msg->fleet_name != fleet_name &&
-      !request_msg->fleet_name.empty())
+      if (request_msg->fleet_name != fleet_name ||
+      request_msg->fleet_name.empty())
         return;
 
       connections->fleet->open_lanes(request_msg->open_lanes);
@@ -859,6 +1066,93 @@ std::shared_ptr<Connections> make_fleet(
 
       connections->closed_lanes_pub->publish(state_msg);
     });
+
+  connections->speed_limit_request_sub =
+    adapter->node()->create_subscription<
+    rmf_fleet_msgs::msg::SpeedLimitRequest>(
+    rmf_fleet_adapter::SpeedLimitRequestTopicName,
+    rclcpp::SystemDefaultsQoS(),
+    [w = connections->weak_from_this(), fleet_name](
+      rmf_fleet_msgs::msg::SpeedLimitRequest::ConstSharedPtr request_msg)
+    {
+      const auto connections = w.lock();
+      if (!connections)
+        return;
+
+      if (request_msg->fleet_name != fleet_name ||
+      request_msg->fleet_name.empty())
+        return;
+
+      std::vector<rmf_fleet_adapter::agv::FleetUpdateHandle::SpeedLimitRequest>
+      requests;
+      for (const auto& limit : request_msg->speed_limits)
+      {
+        auto request =
+        rmf_fleet_adapter::agv::FleetUpdateHandle::SpeedLimitRequest(
+          limit.lane_index, limit.speed_limit);
+        requests.push_back(std::move(request));
+      }
+      connections->fleet->limit_lane_speeds(requests);
+      connections->fleet->remove_speed_limits(request_msg->remove_limits);
+    });
+
+  connections->interrupt_request_sub =
+    adapter->node()->create_subscription<rmf_fleet_msgs::msg::InterruptRequest>(
+    rmf_fleet_adapter::InterruptRequestTopicName,
+    rclcpp::SystemDefaultsQoS(),
+    [w = connections->weak_from_this(), fleet_name](
+      rmf_fleet_msgs::msg::InterruptRequest::UniquePtr request_msg)
+    {
+      const auto connections = w.lock();
+      if (!connections)
+        return;
+
+      if (request_msg->fleet_name != fleet_name)
+        return;
+
+      const auto rit = connections->robots.find(request_msg->robot_name);
+      if (rit == connections->robots.end())
+      {
+        RCLCPP_WARN(
+          connections->adapter->node()->get_logger(),
+          "Could not find robot [%s] in fleet [%s]",
+          request_msg->robot_name.c_str(),
+          fleet_name.c_str());
+        return;
+      }
+
+      rit->second->handle_interrupt_request(*request_msg);
+    });
+
+  /* *INDENT-OFF* */
+  connections->mode_request_sub =
+    adapter->node()->create_subscription<rmf_fleet_msgs::msg::ModeRequest>(
+    "/action_execution_notice",
+    rclcpp::SystemDefaultsQoS(),
+    [w = connections->weak_from_this(), fleet_name](
+      rmf_fleet_msgs::msg::ModeRequest::UniquePtr msg)
+    {
+      if (msg->fleet_name.empty() ||
+        msg->fleet_name != fleet_name ||
+        msg->robot_name.empty())
+      {
+        return;
+      }
+
+      if (msg->mode.mode == msg->mode.MODE_IDLE)
+      {
+        const auto self = w.lock();
+        if (!self)
+          return;
+
+        const auto command_it = self->robots.find(msg->robot_name);
+        if (command_it == self->robots.end())
+          return;
+
+        command_it->second->complete_robot_action();
+      }
+    });
+  /* *INDENT-ON* */
 
   // Parameters required for task planner
   // Battery system
@@ -1017,6 +1311,20 @@ std::shared_ptr<Connections> make_fleet(
 
       return false;
     });
+
+  const auto consider =
+    [](const nlohmann::json& /*description*/,
+      rmf_fleet_adapter::agv::FleetUpdateHandle::Confirmation& confirm)
+    {
+      // We accept all actions since full_control may be used for different
+      // types of robots.
+      confirm.accept();
+    };
+
+  // Configure this fleet to perform any kind of teleop action
+  connections->fleet->add_performable_action(
+    "teleop",
+    consider);
 
   if (node->declare_parameter<bool>("disable_delay_threshold", false))
   {

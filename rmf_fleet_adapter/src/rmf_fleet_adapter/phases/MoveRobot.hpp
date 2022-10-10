@@ -18,7 +18,7 @@
 #ifndef SRC__RMF_FLEET_ADAPTER__PHASES__MOVEROBOT_HPP
 #define SRC__RMF_FLEET_ADAPTER__PHASES__MOVEROBOT_HPP
 
-#include "../Task.hpp"
+#include "../LegacyTask.hpp"
 #include "../agv/RobotContext.hpp"
 
 #include <rmf_traffic_ros2/Time.hpp>
@@ -26,20 +26,36 @@
 namespace rmf_fleet_adapter {
 namespace phases {
 
+namespace {
+//==============================================================================
+inline std::string destination(
+  const rmf_traffic::agv::Plan::Waypoint& wp,
+  const rmf_traffic::agv::Graph& graph)
+{
+  if (wp.graph_index().has_value())
+    return rmf_task::standard_waypoint_name(graph, *wp.graph_index());
+
+  std::ostringstream oss;
+  oss << "(" << wp.position().block<2, 1>(0, 0).transpose() << ")";
+  return oss.str();
+}
+} // anonymous namespace
+
 struct MoveRobot
 {
   class Action;
 
-  class ActivePhase : public Task::ActivePhase
+  class ActivePhase : public LegacyTask::ActivePhase
   {
   public:
 
     ActivePhase(
       agv::RobotContextPtr context,
       std::vector<rmf_traffic::agv::Plan::Waypoint> waypoints,
+      rmf_traffic::PlanId plan_id,
       std::optional<rmf_traffic::Duration> tail_period);
 
-    const rxcpp::observable<Task::StatusMsg>& observe() const override;
+    const rxcpp::observable<LegacyTask::StatusMsg>& observe() const override;
 
     rmf_traffic::Duration estimate_remaining_time() const override;
 
@@ -54,21 +70,22 @@ struct MoveRobot
     agv::RobotContextPtr _context;
     std::string _description;
     std::shared_ptr<Action> _action;
-    rxcpp::observable<Task::StatusMsg> _obs;
+    rxcpp::observable<LegacyTask::StatusMsg> _obs;
     rxcpp::subjects::subject<bool> _cancel_subject;
     std::optional<rmf_traffic::Duration> _tail_period;
   };
 
-  class PendingPhase : public Task::PendingPhase
+  class PendingPhase : public LegacyTask::PendingPhase
   {
   public:
 
     PendingPhase(
       agv::RobotContextPtr context,
       std::vector<rmf_traffic::agv::Plan::Waypoint> waypoints,
+      rmf_traffic::PlanId plan_id,
       std::optional<rmf_traffic::Duration> tail_period);
 
-    std::shared_ptr<Task::ActivePhase> begin() override;
+    std::shared_ptr<LegacyTask::ActivePhase> begin() override;
 
     rmf_traffic::Duration estimate_phase_duration() const override;
 
@@ -78,6 +95,7 @@ struct MoveRobot
 
     agv::RobotContextPtr _context;
     std::vector<rmf_traffic::agv::Plan::Waypoint> _waypoints;
+    rmf_traffic::PlanId _plan_id;
     std::optional<rmf_traffic::Duration> _tail_period;
     std::string _description;
   };
@@ -89,6 +107,7 @@ struct MoveRobot
     Action(
       agv::RobotContextPtr& context,
       std::vector<rmf_traffic::agv::Plan::Waypoint>& waypoints,
+      rmf_traffic::PlanId plan_id,
       std::optional<rmf_traffic::Duration> tail_period);
 
     template<typename Subscriber>
@@ -98,10 +117,15 @@ struct MoveRobot
 
     agv::RobotContextPtr _context;
     std::vector<rmf_traffic::agv::Plan::Waypoint> _waypoints;
+    rmf_traffic::PlanId _plan_id;
     std::optional<rmf_traffic::Duration> _tail_period;
     std::optional<rmf_traffic::Time> _last_tail_bump;
     std::size_t _next_path_index = 0;
-    bool _interrupted = false;
+
+    rclcpp::TimerBase::SharedPtr _update_timeout_timer;
+    rclcpp::Time _last_update_rostime;
+    // TODO(MXG): Make this timeout configurable by users
+    rmf_traffic::Duration _update_timeout = std::chrono::seconds(10);
   };
 };
 
@@ -112,6 +136,30 @@ void MoveRobot::Action::operator()(const Subscriber& s)
   if (!command)
     return;
 
+  _last_update_rostime = _context->node()->now();
+  _update_timeout_timer = _context->node()->try_create_wall_timer(
+    _update_timeout, [w = weak_from_this()]()
+    {
+      const auto self = w.lock();
+      if (!self)
+        return;
+
+      const auto now = self->_context->node()->now();
+      if (now < self->_last_update_rostime + self->_update_timeout)
+      {
+        // The simulation is paused or running slowly, so we should allow more
+        // patience before assuming that there's been a timeout.
+        return;
+      }
+
+      self->_last_update_rostime = now;
+
+      // The RobotCommandHandle seems to have frozen up. Perhaps a bug in the
+      // user's code has caused the RobotCommandHandle to drop the command. We
+      // will request a replan.
+      self->_context->request_replan();
+    });
+
   _context->command()->follow_new_path(
     _waypoints,
     [s, w_action = weak_from_this(), r = _context->requester_id()](
@@ -120,6 +168,9 @@ void MoveRobot::Action::operator()(const Subscriber& s)
       const auto action = w_action.lock();
       if (!action)
         return;
+
+      action->_last_update_rostime = action->_context->node()->now();
+      action->_update_timeout_timer->reset();
 
       if (path_index == action->_waypoints.size()-1
       && estimate < std::chrono::seconds(1)
@@ -131,10 +182,17 @@ void MoveRobot::Action::operator()(const Subscriber& s)
         {
           action->_last_tail_bump = now;
           action->_context->worker().schedule(
-            [context = action->_context, bump = *action->_tail_period](
+            [
+              context = action->_context,
+              bump = *action->_tail_period,
+              plan_id = action->_plan_id
+            ](
               const auto&)
             {
-              context->itinerary().delay(bump);
+              if (const auto c = context->itinerary().cumulative_delay(plan_id))
+              {
+                context->itinerary().cumulative_delay(plan_id, *c + bump);
+              }
             });
         }
       }
@@ -142,88 +200,101 @@ void MoveRobot::Action::operator()(const Subscriber& s)
       if (path_index != action->_next_path_index)
       {
         action->_next_path_index = path_index;
-        Task::StatusMsg msg;
-        msg.state = Task::StatusMsg::STATE_ACTIVE;
+        LegacyTask::StatusMsg msg;
+        msg.state = LegacyTask::StatusMsg::STATE_ACTIVE;
 
         if (path_index < action->_waypoints.size())
         {
-          std::ostringstream oss;
-          oss << "Moving [" << r << "]: ("
-              << action->_waypoints[path_index].position().transpose() << ") -> ("
-              << action->_waypoints.back().position().transpose() << ")";
-          msg.status = oss.str();
+          msg.status = "Heading towards "
+          + destination(
+            action->_waypoints[path_index],
+            action->_context->planner()->get_configuration().graph());
         }
         else
         {
-          std::ostringstream oss;
-          oss << "Moving [" << r << "] | ERROR: Bad state. Arrived at path index ["
-              << path_index << "] but path only has ["
-              << action->_waypoints.size() << "] elements.";
-          msg.status = oss.str();
+          // TODO(MXG): This should really be a warning, but the legacy phase shim
+          // does not have a way for us to specify a warning.
+          msg.status = "[Bug] [MoveRobot] Current path index was specified as ["
+          + std::to_string(path_index) + "] but that exceeds the limit of ["
+          + std::to_string(action->_waypoints.size()-1) + "]";
+        }
+
+        if (path_index > 0)
+        {
+          const auto& arrival =
+          action->_waypoints[path_index - 1].arrival_checkpoints();
+
+          for (const auto& c : arrival)
+          {
+            action->_context->itinerary()
+            .reached(action->_plan_id, c.route_id, c.checkpoint_id);
+          }
         }
 
         s.on_next(msg);
       }
 
-      if (action->_next_path_index >= action->_waypoints.size())
+      if (action->_next_path_index > action->_waypoints.size())
       {
-        // TODO(MXG): Consider a warning here. We'll ignore it for now, because
-        // maybe it was called when the robot arrived at the final waypoint.
         return;
       }
 
-      const auto current_delay = action->_context->itinerary().delay();
-
-      const rmf_traffic::Time now = action->_context->now();
-      const auto planned_time = action->_waypoints[path_index].time();
-      const auto previously_expected_arrival = planned_time + current_delay;
-      const auto newly_expected_arrival = now + estimate;
-
-      const auto new_delay = [&]() -> rmf_traffic::Duration
+      const auto& target_wp = action->_waypoints[path_index];
+      const auto& itinerary = action->_context->itinerary().itinerary();
+      for (const auto& progress : target_wp.progress_checkpoints())
       {
-        if (newly_expected_arrival < planned_time)
+        for (const auto& c : progress.checkpoints)
         {
-          // If the robot is running ahead of time, we should actually fall back
-          // to the original timing prediction, with the assumption that the
-          // robot will stop and wait at the waypoint after arriving.
-          return planned_time - previously_expected_arrival;
-        }
+          const auto& c_wp =
+          itinerary[c.route_id].trajectory()[c.checkpoint_id];
 
-        // Otherwise we will adjust the time to match up with the latest
-        // expectations
-        return newly_expected_arrival - previously_expected_arrival;
-      } ();
-
-      if (!action->_interrupted)
-      {
-        if (const auto max_delay = action->_context->maximum_delay())
-        {
-          if (*max_delay < current_delay + new_delay)
+          if (estimate < target_wp.time() - c_wp.time())
           {
-            action->_interrupted = true;
-            action->_context->trigger_interrupt();
+            action->_context->itinerary()
+            .reached(action->_plan_id, c.route_id, c.checkpoint_id);
           }
         }
       }
 
-      if (std::chrono::milliseconds(500).count() < std::abs(new_delay.count()))
+      if (action->_plan_id != action->_context->itinerary().current_plan_id())
       {
-        action->_context->worker().schedule(
-          [context = action->_context, new_delay](const auto&)
-          {
-            context->itinerary().delay(new_delay);
-          });
+        // If the current Plan ID of the itinerary does not match the Plan ID
+        // of this action, then we should not modify the delay here.
+        return;
       }
+
+      using namespace std::chrono_literals;
+      const rmf_traffic::Time now = action->_context->now();
+      const auto planned_time = target_wp.time();
+      const auto newly_expected_arrival = now + estimate;
+      const auto new_cumulative_delay = newly_expected_arrival - planned_time;
+      action->_context->worker().schedule(
+        [
+          context = action->_context,
+          plan_id = action->_plan_id,
+          new_cumulative_delay
+        ](const auto&)
+        {
+          context->itinerary().cumulative_delay(
+            plan_id, new_cumulative_delay, 500ms);
+        });
     },
-    [s]()
+    [s, w = weak_from_this()]()
     {
-      Task::StatusMsg msg;
-      msg.state = Task::StatusMsg::STATE_COMPLETED;
-      msg.status = "move robot success";
-      s.on_next(msg);
+      if (const auto self = w.lock())
+      {
+        for (const auto& c : self->_waypoints.back().arrival_checkpoints())
+        {
+          self->_context->itinerary().reached(
+            self->_plan_id, c.route_id, c.checkpoint_id);
+        }
 
-      s.on_completed();
-
+        LegacyTask::StatusMsg msg;
+        msg.state = LegacyTask::StatusMsg::STATE_COMPLETED;
+        msg.status = "move robot success";
+        s.on_next(msg);
+        s.on_completed();
+      }
     });
 }
 
