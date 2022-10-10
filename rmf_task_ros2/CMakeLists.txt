@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.5)
 project(rmf_task_ros2)
 
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
+  set(CMAKE_CXX_STANDARD 17)
 endif()
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # we dont use add_compile_options with pedantic in message packages
@@ -14,21 +14,30 @@ endif()
 include(GNUInstallDirs)
 
 find_package(ament_cmake REQUIRED)
+find_package(rmf_api_msgs REQUIRED)
 find_package(rmf_traffic REQUIRED)
 find_package(rmf_traffic_ros2 REQUIRED)
 find_package(rmf_task_msgs REQUIRED)
+find_package(rmf_websocket REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(nlohmann_json REQUIRED)
+find_package(nlohmann_json_schema_validator_vendor REQUIRED)
+find_package(nlohmann_json_schema_validator REQUIRED)
 
 file(GLOB_RECURSE core_lib_srcs "src/rmf_task_ros2/*.cpp")
 add_library(rmf_task_ros2 SHARED ${core_lib_srcs})
 
 target_link_libraries(rmf_task_ros2
   PUBLIC
+    rmf_api_msgs::rmf_api_msgs
     rmf_traffic::rmf_traffic
     rmf_traffic_ros2::rmf_traffic_ros2
+    rmf_websocket::rmf_websocket
     ${rmf_task_msgs_LIBRARIES}
     ${rclcpp_LIBRARIES}
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
 )
 
 target_include_directories(rmf_task_ros2
@@ -37,22 +46,23 @@ target_include_directories(rmf_task_ros2
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     ${rmf_traffic_ros2_INCLUDE_DIRS}
     ${rmf_task_msgs_INCLUDE_DIRS}
+    ${rmf_websocket_INCLUDE_DIRS}
     ${rclcpp_INCLUDE_DIRS}
 )
 
 ament_export_targets(rmf_task_ros2 HAS_LIBRARY_TARGET)
-ament_export_dependencies(rmf_traffic rmf_task_msgs rclcpp)
+ament_export_dependencies(rmf_traffic rmf_task_msgs rclcpp nlohmann_json)
 
 #===============================================================================
 
 if(BUILD_TESTING)
   find_package(ament_cmake_catch2 QUIET)
-  find_package(rmf_cmake_uncrustify REQUIRED)
+  find_package(ament_cmake_uncrustify REQUIRED)
   find_file(uncrustify_config_file
     NAMES "rmf_code_style.cfg"
     PATHS "${rmf_utils_DIR}/../../../share/rmf_utils/")
 
-  rmf_uncrustify(
+  ament_uncrustify(
     ARGN include src test
     CONFIG_FILE ${uncrustify_config_file}
     MAX_LINE_LENGTH 80
@@ -67,6 +77,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_rmf_task_ros2
       rmf_task_ros2
       rmf_traffic::rmf_traffic
+      rmf_websocket::rmf_websocket
       rmf_traffic_ros2::rmf_traffic_ros2
       -pthread
   )

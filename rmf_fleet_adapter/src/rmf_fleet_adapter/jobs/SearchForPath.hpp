@@ -40,7 +40,8 @@ public:
     rmf_traffic::agv::Plan::Goal goal,
     std::shared_ptr<const rmf_traffic::schedule::Snapshot> schedule,
     rmf_traffic::schedule::ParticipantId participant_id,
-    const std::shared_ptr<const rmf_traffic::Profile>& profile);
+    const std::shared_ptr<const rmf_traffic::Profile>& profile,
+    std::optional<rmf_traffic::Duration> planning_time_limit);
 
   enum class Type
   {
@@ -76,7 +77,8 @@ private:
   rmf_traffic::agv::Plan::Goal _goal;
   std::shared_ptr<const rmf_traffic::schedule::Snapshot> _schedule;
   rmf_traffic::schedule::ParticipantId _participant_id;
-  std::shared_ptr<bool> _interrupt_flag = std::make_shared<bool>(false);
+  std::shared_ptr<std::atomic_bool> _interrupt_flag =
+    std::make_shared<std::atomic_bool>(false);
 
   // The greedy job makes an optimal plan that ignores all other schedule
   // participants. It is used for two purposes:
@@ -96,6 +98,7 @@ private:
   rmf_utils::optional<double> _explicit_cost_limit;
 
   rxcpp::schedulers::worker _worker;
+  std::optional<rmf_traffic::Time> _deadline;
 
   // TODO(MXG): Make these leeway factors configurable
   const double _greedy_leeway = 10.0;
