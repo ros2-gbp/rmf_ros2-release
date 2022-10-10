@@ -26,7 +26,7 @@ namespace services {
 //==============================================================================
 /// Find a path that gets from the start to the goal. It might or might not
 /// comply with the given schedule, depending on what is feasible.
-class FindPath
+class FindPath : public std::enable_shared_from_this<FindPath>
 {
 public:
 
@@ -36,7 +36,8 @@ public:
     rmf_traffic::agv::Plan::Goal goal,
     std::shared_ptr<const rmf_traffic::schedule::Snapshot> schedule,
     rmf_traffic::schedule::ParticipantId participant_id,
-    const std::shared_ptr<const rmf_traffic::Profile>& profile);
+    const std::shared_ptr<const rmf_traffic::Profile>& profile,
+    std::optional<rmf_traffic::Duration> planning_time_limit);
 
   using Result = rmf_traffic::agv::Plan::Result;
 
