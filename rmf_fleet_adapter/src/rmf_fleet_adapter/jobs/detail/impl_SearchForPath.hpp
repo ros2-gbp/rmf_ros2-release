@@ -38,11 +38,18 @@ void SearchForPath::operator()(const Subscriber& s, const Worker&)
 
   if (!_greedy_job)
   {
-    // This means the plan was infeasible from the start, so we will declare
-    // that the job is completed without returning any result.
     s.on_error(std::make_exception_ptr(
         std::runtime_error(
           "[SearchForPath] Impossible path requested")));
+    return;
+  }
+
+  if (_greedy_job->progress().disconnected())
+  {
+    // This means the plan was infeasible from the start, so we will immediately
+    // pass back the current greedy progress object
+    s.on_next(Result{_greedy_job, nullptr, Type::greedy});
+    s.on_completed();
     return;
   }
 
@@ -64,12 +71,19 @@ void SearchForPath::operator()(const Subscriber& s, const Worker&)
       if (!search)
         return;
 
+      if (search->_deadline.has_value())
+      {
+        const auto now = std::chrono::steady_clock::now();
+        if (search->_deadline <= now)
+          search->interrupt();
+      }
+
       auto show_compliant = search->_compliant_finished ?
       search->_compliant_job : std::shared_ptr<Planning>(nullptr);
 
       Result next{search->_greedy_job, show_compliant, Type::greedy};
 
-      const auto& r = result.job.progress();
+      const auto& r = result.job->progress();
       if (r.success())
       {
         if (search->_compliant_finished)
@@ -160,46 +174,57 @@ void SearchForPath::operator()(const Subscriber& s, const Worker&)
   _compliant_sub = rmf_rxcpp::make_job<Planning::Result>(_compliant_job)
     .observe_on(rxcpp::identity_same_worker(_worker))
     .subscribe(
-    [this, s](const Planning::Result& result)
+    [weak = weak_from_this(), s](const Planning::Result& result)
     {
-      auto show_greedy = _greedy_finished ?
-      _greedy_job : std::shared_ptr<Planning>(nullptr);
+      const auto search = weak.lock();
+      if (!search)
+        return;
 
-      Result next{show_greedy, _compliant_job, Type::compliant};
+      if (search->_deadline.has_value())
+      {
+        const auto now = std::chrono::steady_clock::now();
+        if (search->_deadline <= now)
+          search->interrupt();
+      }
 
-      auto& r = result.job.progress();
+      auto show_greedy = search->_greedy_finished ?
+      search->_greedy_job : std::shared_ptr<Planning>(nullptr);
+
+      Result next{show_greedy, search->_compliant_job, Type::compliant};
+
+      auto& r = result.job->progress();
       if (r.success())
       {
         // Return the successful schedule-compliant plan
-        if (_greedy_finished || _explicit_cost_limit)
+        if (search->_greedy_finished || search->_explicit_cost_limit)
         {
           s.on_next(next);
         }
-        _compliant_finished = true;
+        search->_compliant_finished = true;
 
-        if (_greedy_finished)
+        if (search->_greedy_finished)
           s.on_completed();
 
         return;
       }
 
-      if (*_interrupt_flag || r.saturated() || !r.cost_estimate())
+      if (*search->_interrupt_flag || r.saturated() || !r.cost_estimate())
       {
-        if (_greedy_finished)
+        if (search->_greedy_finished)
         {
           s.on_next(next);
           s.on_completed();
         }
-        else if (_explicit_cost_limit)
+        else if (search->_explicit_cost_limit)
         {
           s.on_next(next);
         }
 
-        _compliant_finished = true;
+        search->_compliant_finished = true;
         return;
       }
 
-      if (_explicit_cost_limit)
+      if (search->_explicit_cost_limit)
       {
         // An explicit cost limit means this is part of a Job, so we should
         // report an update whenever we get an update.
@@ -209,18 +234,18 @@ void SearchForPath::operator()(const Subscriber& s, const Worker&)
         return;
       }
 
-      if (_greedy_finished)
+      if (search->_greedy_finished)
       {
         // We don't have an explicit cost limit, so we'll just check if the
         // greedy job search has granted us any more leeway.
         const double new_maximum =
-        _compliant_leeway * _greedy_job->progress()->get_cost();
+        search->_compliant_leeway * search->_greedy_job->progress()->get_cost();
 
         if (*r.options().maximum_cost_estimate() < new_maximum)
         {
           // Push the maximum out a bit more and let the job try again.
           r.options().maximum_cost_estimate(new_maximum);
-          result.job.resume();
+          result.job->resume();
           return;
         }
 
@@ -233,7 +258,7 @@ void SearchForPath::operator()(const Subscriber& s, const Worker&)
 
       // Discard the job because it can no longer produce an acceptable result.
       // The SearchForPath will continue looking for a greedy plan.
-      _compliant_finished = true;
+      search->_compliant_finished = true;
     });
 }
 
