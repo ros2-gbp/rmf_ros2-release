@@ -2,10 +2,10 @@
 Changelog for package rmf_traffic_ros2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.3.0 (2023-06-08)
+2.1.7 (2023-08-10)
 ------------------
 
-2.2.0 (2023-06-06)
+2.1.6 (2023-06-02)
 ------------------
 * Switch to rst changelogs (`#276 <https://github.com/open-rmf/rmf_ros2/pull/276>`_)
 * Contributors: Yadunund

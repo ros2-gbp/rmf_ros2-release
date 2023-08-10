@@ -2,10 +2,13 @@
 Changelog for package rmf_fleet_adapter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.3.0 (2023-06-08)
+2.1.7 (2023-08-10)
 ------------------
+* Fix comparator for direct assignment ordering (`#292 <https://github.com/open-rmf/rmf_ros2/pull/292>`_)
+* Adding initiator and request time to booking (`#284 <https://github.com/open-rmf/rmf_ros2/pull/284>`_)
+* Contributors: Aaron Chong, Yadunund
 
-2.2.0 (2023-06-06)
+2.1.6 (2023-06-02)
 ------------------
 * Fix race condition related to the ``finished`` callback of ``perform_action`` events: (`#273 <https://github.com/open-rmf/rmf_ros2/pull/273>`_)
 * Switch to rst changelogs (`#276 <https://github.com/open-rmf/rmf_ros2/pull/276>`_)
