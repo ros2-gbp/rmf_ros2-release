@@ -2,10 +2,13 @@
 Changelog for package rmf_fleet_adapter_python
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.2.1 (2023-08-10)
+2.3.1 (2023-08-10)
 ------------------
-* Adding initiator and request time to booking (`#285 <https://github.com/open-rmf/rmf_ros2/pull/285>`_)
-* Contributors: Aaron Chong, Yadunund
+* Adding initiator and request time to booking (`#267 <https://github.com/open-rmf/rmf_ros2/pull/267>`_)
+* Contributors: Aaron Chong
+
+2.3.0 (2023-06-08)
+------------------
 
 2.2.0 (2023-06-06)
 ------------------
