@@ -2,21 +2,16 @@
 Changelog for package rmf_fleet_adapter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.3.2 (2023-08-28)
+2.2.2 (2023-09-11)
 ------------------
-* Improve linking time (`#297 <https://github.com/open-rmf/rmf_ros2/pull/297>`_)
-* EasyFullControl API (`#235 <https://github.com/open-rmf/rmf_ros2/pull/235>`_)
-* Contributors: Grey, Luca Della Vedova, Xiyu, Yadunund
+* Improve linking time (`#300 <https://github.com/open-rmf/rmf_ros2/pull/300>`_)
+* Contributors: Grey, Luca Della Vedova, Yadunund
 
-2.3.1 (2023-08-10)
+2.2.1 (2023-08-10)
 ------------------
-* Remove duplicate task schemas (`#294 <https://github.com/open-rmf/rmf_ros2/pull/294>`_)
-* Fix comparator for direct assignment ordering (`#288 <https://github.com/open-rmf/rmf_ros2/pull/288>`_)
-* Adding initiator and request time to booking (`#267 <https://github.com/open-rmf/rmf_ros2/pull/267>`_)
-* Contributors: Aaron Chong, Omar Hamza, Yadunund
-
-2.3.0 (2023-06-08)
-------------------
+* Fix comparator for direct assignment ordering (`#291 <https://github.com/open-rmf/rmf_ros2/pull/291>`_)
+* Adding initiator and request time to booking (`#285 <https://github.com/open-rmf/rmf_ros2/pull/285>`_)
+* Contributors: Aaron Chong, Yadunund
 
 2.2.0 (2023-06-06)
 ------------------

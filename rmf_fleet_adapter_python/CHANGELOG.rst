@@ -2,18 +2,13 @@
 Changelog for package rmf_fleet_adapter_python
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.3.2 (2023-08-28)
+2.2.2 (2023-09-11)
 ------------------
-* EasyFullControl API (`#235 <https://github.com/open-rmf/rmf_ros2/pull/235>`_)
-* Contributors: Grey, Luca Della Vedova, Xiyu, Yadunund
 
-2.3.1 (2023-08-10)
+2.2.1 (2023-08-10)
 ------------------
-* Adding initiator and request time to booking (`#267 <https://github.com/open-rmf/rmf_ros2/pull/267>`_)
-* Contributors: Aaron Chong
-
-2.3.0 (2023-06-08)
-------------------
+* Adding initiator and request time to booking (`#285 <https://github.com/open-rmf/rmf_ros2/pull/285>`_)
+* Contributors: Aaron Chong, Yadunund
 
 2.2.0 (2023-06-06)
 ------------------
