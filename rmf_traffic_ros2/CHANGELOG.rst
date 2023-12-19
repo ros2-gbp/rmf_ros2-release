@@ -2,17 +2,20 @@
 Changelog for package rmf_traffic_ros2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.2.3 (2023-09-20)
+2.4.0 (2023-12-15)
 ------------------
-* EasyFullControl API (`#302 <https://github.com/open-rmf/rmf_ros2/pull/302>`_)
-* Contributors: Luca Della Vedova, Michael X. Grey, Xiyu, Yadunund
 
-2.2.2 (2023-09-11)
+2.3.2 (2023-08-28)
 ------------------
-* Improve linking time (`#300 <https://github.com/open-rmf/rmf_ros2/pull/300>`_)
-* Contributors: Grey, Luca Della Vedova, Yadunund
+* Improve linking time (`#297 <https://github.com/open-rmf/rmf_ros2/pull/297>`_)
+* EasyFullControl API (`#235 <https://github.com/open-rmf/rmf_ros2/pull/235>`_)
+* Remove a few warnings related to RCLCPP logger (`#296 <https://github.com/open-rmf/rmf_ros2/pull/296>`_)
+* Contributors: Arjo Chakravarty, Grey, Luca Della Vedova, Xiyu, Yadunund
 
-2.2.1 (2023-08-10)
+2.3.1 (2023-08-10)
+------------------
+
+2.3.0 (2023-06-08)
 ------------------
 
 2.2.0 (2023-06-06)
