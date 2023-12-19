@@ -1,0 +1,12 @@
+Source: ros-rolling-rmf-fleet-adapter
+Section: misc
+Priority: optional
+Maintainer: Grey <grey@openrobotics.org>
+Build-Depends: debhelper (>= 9.0.0), libeigen3-dev, libyaml-cpp-dev, nlohmann-json3-dev, ros-rolling-ament-cmake, ros-rolling-ament-cmake-catch2 <!nocheck>, ros-rolling-ament-cmake-uncrustify <!nocheck>, ros-rolling-nlohmann-json-schema-validator-vendor, ros-rolling-rclcpp, ros-rolling-rclcpp-components, ros-rolling-rmf-api-msgs, ros-rolling-rmf-battery, ros-rolling-rmf-building-map-msgs, ros-rolling-rmf-dispenser-msgs, ros-rolling-rmf-door-msgs, ros-rolling-rmf-fleet-msgs, ros-rolling-rmf-ingestor-msgs, ros-rolling-rmf-lift-msgs, ros-rolling-rmf-task, ros-rolling-rmf-task-msgs, ros-rolling-rmf-task-ros2, ros-rolling-rmf-task-sequence, ros-rolling-rmf-traffic, ros-rolling-rmf-traffic-ros2, ros-rolling-rmf-utils, ros-rolling-rmf-websocket, ros-rolling-std-msgs, ros-rolling-ros-workspace
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-rolling-rmf-fleet-adapter
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, nlohmann-json3-dev, ros-rolling-nlohmann-json-schema-validator-vendor, ros-rolling-rclcpp, ros-rolling-rclcpp-components, ros-rolling-rmf-api-msgs, ros-rolling-rmf-battery, ros-rolling-rmf-building-map-msgs, ros-rolling-rmf-dispenser-msgs, ros-rolling-rmf-door-msgs, ros-rolling-rmf-fleet-msgs, ros-rolling-rmf-ingestor-msgs, ros-rolling-rmf-lift-msgs, ros-rolling-rmf-task, ros-rolling-rmf-task-msgs, ros-rolling-rmf-task-ros2, ros-rolling-rmf-task-sequence, ros-rolling-rmf-traffic, ros-rolling-rmf-traffic-ros2, ros-rolling-rmf-utils, ros-rolling-rmf-websocket, ros-rolling-std-msgs, ros-rolling-ros-workspace
+Description: Fleet Adapter package for RMF fleets.
