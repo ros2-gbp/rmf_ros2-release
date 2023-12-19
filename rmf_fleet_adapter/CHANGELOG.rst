@@ -2,27 +2,18 @@
 Changelog for package rmf_fleet_adapter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.2.4 (2023-12-15)
+2.1.8 (2023-12-19)
 ------------------
-* Mutex Groups, localization hook, dynamic charging, and new graph elements (`#310 <https://github.com/open-rmf/rmf_ros2/pull/310>`_)
+* Cancel automatic pending tasks that are removed during new assignments (`#301 <https://github.com/open-rmf/rmf_ros2/pull/303>`_)
+* Contributors: Aaron Chong
 
-2.2.3 (2023-09-20)
+2.1.7 (2023-08-10)
 ------------------
-* EasyFullControl API (`#302 <https://github.com/open-rmf/rmf_ros2/pull/302>`_)
-* Contributors: Luca Della Vedova, Michael X. Grey, Xiyu, Yadunund
-
-2.2.2 (2023-09-11)
-------------------
-* Improve linking time (`#300 <https://github.com/open-rmf/rmf_ros2/pull/300>`_)
-* Contributors: Grey, Luca Della Vedova, Yadunund
-
-2.2.1 (2023-08-10)
-------------------
-* Fix comparator for direct assignment ordering (`#291 <https://github.com/open-rmf/rmf_ros2/pull/291>`_)
-* Adding initiator and request time to booking (`#285 <https://github.com/open-rmf/rmf_ros2/pull/285>`_)
+* Fix comparator for direct assignment ordering (`#292 <https://github.com/open-rmf/rmf_ros2/pull/292>`_)
+* Adding initiator and request time to booking (`#284 <https://github.com/open-rmf/rmf_ros2/pull/284>`_)
 * Contributors: Aaron Chong, Yadunund
 
-2.2.0 (2023-06-06)
+2.1.6 (2023-06-02)
 ------------------
 * Fix race condition related to the ``finished`` callback of ``perform_action`` events: (`#273 <https://github.com/open-rmf/rmf_ros2/pull/273>`_)
 * Switch to rst changelogs (`#276 <https://github.com/open-rmf/rmf_ros2/pull/276>`_)

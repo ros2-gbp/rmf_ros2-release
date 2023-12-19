@@ -1249,12 +1249,10 @@ std::shared_ptr<Connections> make_fleet(
 
   if (finishing_request_string == "charge")
   {
-    auto charge_factory =
+    finishing_request =
       std::make_shared<rmf_task::requests::ChargeBatteryFactory>(
       std::string(node->get_name()),
       std::move(get_time));
-    charge_factory->set_indefinite(true);
-    finishing_request = charge_factory;
     RCLCPP_INFO(
       node->get_logger(),
       "Fleet is configured to perform ChargeBattery as finishing request");

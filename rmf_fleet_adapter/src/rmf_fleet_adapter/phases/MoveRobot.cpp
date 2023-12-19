@@ -83,7 +83,7 @@ const std::string& MoveRobot::ActivePhase::description() const
 MoveRobot::PendingPhase::PendingPhase(
   agv::RobotContextPtr context,
   std::vector<rmf_traffic::agv::Plan::Waypoint> waypoints,
-  PlanIdPtr plan_id,
+  rmf_traffic::PlanId plan_id,
   std::optional<rmf_traffic::Duration> tail_period)
 : _context{std::move(context)},
   _waypoints{std::move(waypoints)},
@@ -93,29 +93,15 @@ MoveRobot::PendingPhase::PendingPhase(
   std::ostringstream oss;
   const auto dest = destination(
     _waypoints.back(), _context->planner()->get_configuration().graph());
-  oss << "Move to " << dest << " <" << _waypoints.back().position().transpose()
-      << "> through " << _waypoints.size() << " points";
+  oss << "Move to " << dest;
   _description = oss.str();
 }
 
 //==============================================================================
 std::shared_ptr<LegacyTask::ActivePhase> MoveRobot::PendingPhase::begin()
 {
-  rmf_traffic::PlanId plan_id = 0;
-  if (_plan_id)
-  {
-    plan_id = *_plan_id;
-  }
-  else
-  {
-    RCLCPP_ERROR(
-      _context->node()->get_logger(),
-      "No plan_id was provided for MoveRobot action for robot [%s]. This is a "
-      "critical internal error, please report this bug to the RMF maintainers.",
-      _context->requester_id().c_str());
-  }
   return std::make_shared<MoveRobot::ActivePhase>(
-    _context, _waypoints, plan_id, _tail_period);
+    _context, _waypoints, _plan_id, _tail_period);
 }
 
 //==============================================================================
@@ -142,16 +128,7 @@ MoveRobot::Action::Action(
   _plan_id{plan_id},
   _tail_period{tail_period}
 {
-  _first_graph_index = [&]() -> std::optional<std::size_t>
-    {
-      for (const auto& wp : _waypoints)
-      {
-        if (wp.graph_index().has_value())
-          return wp.graph_index();
-      }
-
-      return std::nullopt;
-    }();
+  // no op
 }
 
 } // namespace phases

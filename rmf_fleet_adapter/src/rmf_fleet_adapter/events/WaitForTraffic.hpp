@@ -19,7 +19,6 @@
 #define SRC__RMF_FLEET_ADAPTER__EVENTS__WAITFORTRAFFIC_HPP
 
 #include "../agv/RobotContext.hpp"
-#include "../LegacyTask.hpp"
 
 #include <rmf_task/events/SimpleEventState.hpp>
 #include <rmf_task_sequence/Event.hpp>
@@ -39,7 +38,7 @@ public:
 
     static std::shared_ptr<Standby> make(
       agv::RobotContextPtr context,
-      PlanIdPtr plan_id,
+      rmf_traffic::PlanId plan_id,
       rmf_traffic::Dependencies dependencies,
       rmf_traffic::Time expected_time,
       const AssignIDPtr& id,
@@ -55,7 +54,7 @@ public:
 
   private:
     agv::RobotContextPtr _context;
-    PlanIdPtr _plan_id;
+    rmf_traffic::PlanId _plan_id;
     rmf_traffic::Dependencies _dependencies;
     rmf_traffic::Time _expected_time;
     rmf_task::events::SimpleEventStatePtr _state;
@@ -105,7 +104,6 @@ public:
     std::function<void()> _finished;
     rclcpp::TimerBase::SharedPtr _timer;
     std::optional<rmf_traffic::Time> _decision_made;
-    rmf_rxcpp::subscription_guard _mutex_group_listener;
   };
 
 };

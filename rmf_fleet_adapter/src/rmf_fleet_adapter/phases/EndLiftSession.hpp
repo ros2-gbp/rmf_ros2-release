@@ -59,8 +59,10 @@ struct EndLiftSession
     std::string _destination;
     std::string _description;
     rxcpp::observable<LegacyTask::StatusMsg> _obs;
+    rclcpp::TimerBase::SharedPtr _timer;
 
     void _init_obs();
+    void _publish_session_end();
   };
 
   class Pending : public LegacyTask::PendingPhase

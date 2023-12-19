@@ -2,23 +2,15 @@
 Changelog for package rmf_task_ros2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.2.4 (2023-12-15)
+2.1.8 (2023-12-19)
 ------------------
 
-2.2.3 (2023-09-20)
+2.1.7 (2023-08-10)
 ------------------
+* Adding initiator and request time to booking (`#284 <https://github.com/open-rmf/rmf_ros2/pull/284>`_)
+* Contributors: Aaron Chong
 
-2.2.2 (2023-09-11)
-------------------
-* Improve linking time (`#300 <https://github.com/open-rmf/rmf_ros2/pull/300>`_)
-* Contributors: Grey, Luca Della Vedova, Yadunund
-
-2.2.1 (2023-08-10)
-------------------
-* Adding initiator and request time to booking (`#285 <https://github.com/open-rmf/rmf_ros2/pull/285>`_)
-* Contributors: Aaron Chong, Yadunund
-
-2.2.0 (2023-06-06)
+2.1.6 (2023-06-02)
 ------------------
 * Switch to rst changelogs (`#276 <https://github.com/open-rmf/rmf_ros2/pull/276>`_)
 * Contributors: Yadunund

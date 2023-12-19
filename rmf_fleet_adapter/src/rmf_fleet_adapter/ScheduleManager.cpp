@@ -24,10 +24,11 @@ namespace rmf_fleet_adapter {
 
 //==============================================================================
 ScheduleManager::ScheduleManager(
-  rclcpp::Node&,
+  rclcpp::Node& node,
   rmf_traffic::schedule::Participant participant,
   rmf_traffic_ros2::schedule::Negotiation* negotiation)
-: _participant(std::move(participant)),
+: _node(&node),
+  _participant(std::move(participant)),
   _negotiator(nullptr)
 {
   if (negotiation)
