@@ -73,6 +73,10 @@ TaskManagerPtr TaskManager::make(
   std::optional<std::weak_ptr<rmf_websocket::BroadcastClient>> broadcast_client,
   std::weak_ptr<agv::FleetUpdateHandle> fleet_handle)
 {
+  std::shared_ptr<agv::FleetUpdateHandle> fleet = fleet_handle.lock();
+  if (!fleet)
+    return nullptr;
+
   auto mgr = TaskManagerPtr(
     new TaskManager(
       std::move(context),
@@ -96,6 +100,7 @@ TaskManagerPtr TaskManager::make(
           auto task_id = "emergency_pullover." + self->_context->name() + "."
           + self->_context->group() + "-"
           + std::to_string(self->_count_emergency_pullover++);
+          self->_context->current_task_id(task_id);
 
           // TODO(MXG): Consider subscribing to the emergency pullover update
           self->_emergency_pullover = ActiveTask::start(
@@ -115,18 +120,19 @@ TaskManagerPtr TaskManager::make(
         });
     };
 
-  mgr->_emergency_sub = mgr->_context->node()->emergency_notice()
+  mgr->_emergency_sub = agv::FleetUpdateHandle::Implementation::get(*fleet)
+    .emergency_obs
     .observe_on(rxcpp::identity_same_worker(mgr->_context->worker()))
     .subscribe(
-    [w = mgr->weak_from_this(), begin_pullover](const auto& msg)
+    [w = mgr->weak_from_this(), begin_pullover](const bool is_emergency)
     {
       if (auto mgr = w.lock())
       {
-        if (mgr->_emergency_active == msg->data)
+        if (mgr->_emergency_active == is_emergency)
           return;
 
-        mgr->_emergency_active = msg->data;
-        if (msg->data)
+        mgr->_emergency_active = is_emergency;
+        if (is_emergency)
         {
           if (mgr->_waiting)
           {
@@ -849,10 +855,6 @@ std::string TaskManager::robot_status() const
 //==============================================================================
 auto TaskManager::expected_finish_state() const -> State
 {
-  rmf_task::State current_state =
-    _context->make_get_state()()
-    .time(rmf_traffic_ros2::convert(_context->node()->now()));
-
   std::lock_guard<std::mutex> lock(_mutex);
   if (!_direct_queue.empty())
   {
@@ -862,6 +864,9 @@ auto TaskManager::expected_finish_state() const -> State
   if (_active_task)
     return _context->current_task_end_state();
 
+  rmf_task::State current_state =
+    _context->make_get_state()()
+    .time(rmf_traffic_ros2::convert(_context->node()->now()));
   return current_state;
 }
 
@@ -905,6 +910,20 @@ void TaskManager::enable_responsive_wait(bool value)
     {
       _begin_waiting();
     }
+  }
+}
+
+//==============================================================================
+void TaskManager::set_idle_task(rmf_task::ConstRequestFactoryPtr task)
+{
+  if (_idle_task == task)
+    return;
+
+  _idle_task = std::move(task);
+  std::lock_guard<std::mutex> guard(_mutex);
+  if (!_active_task && _queue.empty() && _direct_queue.empty())
+  {
+    _begin_waiting();
   }
 }
 
@@ -1271,15 +1290,9 @@ void TaskManager::_begin_next_task()
 
   if (_queue.empty() && _direct_queue.empty())
   {
-    if (!_waiting)
+    if (!_waiting && !_finished_waiting)
       _begin_waiting();
 
-    return;
-  }
-
-  if (_waiting)
-  {
-    _waiting.cancel({"New task ready"}, _context->now());
     return;
   }
 
@@ -1304,8 +1317,21 @@ void TaskManager::_begin_next_task()
 
   if (now >= deployment_time)
   {
+    if (_waiting)
+    {
+      _waiting.cancel({"New task ready"}, _context->now());
+      return;
+    }
+
     // Update state in RobotContext and Assign active task
     const auto& id = assignment.request()->booking()->id();
+    RCLCPP_INFO(
+      _context->node()->get_logger(),
+      "Beginning next task [%s] for robot [%s]",
+      id.c_str(),
+      _context->requester_id().c_str());
+
+    _finished_waiting = false;
     _context->current_task_end_state(assignment.finish_state());
     _context->current_task_id(id);
     _active_task = ActiveTask::start(
@@ -1357,7 +1383,7 @@ void TaskManager::_begin_next_task()
   }
   else
   {
-    if (!_waiting)
+    if (!_waiting && !_finished_waiting)
       _begin_waiting();
   }
 
@@ -1454,8 +1480,35 @@ std::function<void()> TaskManager::_robot_interruption_callback()
 //==============================================================================
 void TaskManager::_begin_waiting()
 {
+  if (_idle_task)
+  {
+    const auto request = _idle_task->make_request(_context->make_get_state()());
+    _waiting = ActiveTask::start(
+      _context->task_activator()->activate(
+        _context->make_get_state(),
+        _context->task_parameters(),
+        *request,
+        _update_cb(),
+        _checkpoint_cb(),
+        _phase_finished_cb(),
+        _make_resume_from_waiting()),
+      _context->now());
+    _context->current_task_id(request->booking()->id());
+    return;
+  }
+
   if (!_responsive_wait_enabled)
     return;
+
+  if (_context->location().empty())
+  {
+    RCLCPP_WARN(
+      _context->node()->get_logger(),
+      "Unable to perform responsive wait for [%s] because its position on its "
+      "navigation graph is unknown. This may require operator intervention.",
+      _context->requester_id().c_str());
+    return;
+  }
 
   // Determine the waypoint closest to the robot
   std::size_t waiting_point = _context->location().front().waypoint();
@@ -1487,6 +1540,7 @@ void TaskManager::_begin_waiting()
       _update_cb(),
       _make_resume_from_waiting()),
     _context->now());
+  _context->current_task_id(task_id);
 }
 
 //==============================================================================
@@ -1551,6 +1605,7 @@ std::function<void()> TaskManager::_make_resume_from_waiting()
           if (!self)
             return;
 
+          self->_finished_waiting = true;
           self->_waiting = ActiveTask();
           self->_begin_next_task();
         });
@@ -2138,6 +2193,7 @@ std::function<void()> TaskManager::_task_finished(std::string id)
       // Publish the final state of the task before destructing it
       self->_publish_task_state();
       self->_active_task = ActiveTask();
+      self->_context->current_task_id(std::nullopt);
 
       self->_context->worker().schedule(
         [w = self->weak_from_this()](const auto&)
