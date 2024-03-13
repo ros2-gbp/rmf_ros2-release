@@ -1,3 +1,32 @@
+## rmf_ros2 (rolling) - 2.6.0-1
+
+The packages in the `rmf_ros2` repository were released into the `rolling` distro by running `/usr/bin/bloom-release --rosdistro rolling rmf_ros2` on `Wed, 13 Mar 2024 07:22:59 -0000`
+
+These packages were released:
+- `rmf_charging_schedule`
+- `rmf_fleet_adapter`
+- `rmf_fleet_adapter_python`
+- `rmf_task_ros2`
+- `rmf_traffic_ros2`
+- `rmf_websocket`
+
+Version of package(s) in repository `rmf_ros2`:
+
+- upstream repository: https://github.com/open-rmf/rmf_ros2.git
+- release repository: https://github.com/ros2-gbp/rmf_ros2-release.git
+- rosdistro version: `2.5.0-2`
+- old version: `2.5.0-2`
+- new version: `2.6.0-1`
+
+Versions of tools used:
+
+- bloom version: `0.11.2`
+- catkin_pkg version: `0.5.2`
+- rosdep version: `0.22.2`
+- rosdistro version: `0.9.0`
+- vcstools version: `0.1.42`
+
+
 ## rmf_ros2 (rolling) - 2.5.0-2
 
 The packages in the `rmf_ros2` repository were released into the `rolling` distro by running `/usr/bin/bloom-release --rosdistro rolling --track rolling rmf_ros2` on `Fri, 08 Mar 2024 19:34:37 -0000`
