@@ -1,1 +1,1 @@
-{"base": "9789684e", "parent": "debian/rolling/rmf_websocket", "previous": "6823f65a", "trim": "", "trimbase": ""}
+{"base": "251eb02a", "parent": "debian/jazzy/rmf_websocket", "previous": "c1a60a92", "trim": "", "trimbase": ""}
