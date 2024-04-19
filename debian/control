@@ -1,0 +1,12 @@
+Source: ros-jazzy-rmf-fleet-adapter
+Section: misc
+Priority: optional
+Maintainer: Grey <grey@openrobotics.org>
+Build-Depends: debhelper (>= 9.0.0), ament-cmake, ament-cmake-uncrustify <!nocheck>, libeigen3-dev, libstd-msgs-dev, libyaml-cpp-dev, nlohmann-json3-dev, python3-std-msgs, ros-jazzy-ament-cmake-catch2 <!nocheck>, ros-jazzy-backward-ros, ros-jazzy-nlohmann-json-schema-validator-vendor, ros-jazzy-rclcpp, ros-jazzy-rclcpp-components, ros-jazzy-rmf-api-msgs, ros-jazzy-rmf-battery, ros-jazzy-rmf-building-map-msgs, ros-jazzy-rmf-dispenser-msgs, ros-jazzy-rmf-door-msgs, ros-jazzy-rmf-fleet-msgs, ros-jazzy-rmf-ingestor-msgs, ros-jazzy-rmf-lift-msgs, ros-jazzy-rmf-task, ros-jazzy-rmf-task-msgs, ros-jazzy-rmf-task-ros2, ros-jazzy-rmf-task-sequence, ros-jazzy-rmf-traffic, ros-jazzy-rmf-traffic-ros2, ros-jazzy-rmf-utils, ros-jazzy-rmf-websocket, ros-std-msgs, ros-jazzy-ros-workspace
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-jazzy-rmf-fleet-adapter
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libstd-msgs-dev, nlohmann-json3-dev, python3-std-msgs, ros-jazzy-backward-ros, ros-jazzy-nlohmann-json-schema-validator-vendor, ros-jazzy-rclcpp, ros-jazzy-rclcpp-components, ros-jazzy-rmf-api-msgs, ros-jazzy-rmf-battery, ros-jazzy-rmf-building-map-msgs, ros-jazzy-rmf-dispenser-msgs, ros-jazzy-rmf-door-msgs, ros-jazzy-rmf-fleet-msgs, ros-jazzy-rmf-ingestor-msgs, ros-jazzy-rmf-lift-msgs, ros-jazzy-rmf-task, ros-jazzy-rmf-task-msgs, ros-jazzy-rmf-task-ros2, ros-jazzy-rmf-task-sequence, ros-jazzy-rmf-traffic, ros-jazzy-rmf-traffic-ros2, ros-jazzy-rmf-utils, ros-jazzy-rmf-websocket, ros-std-msgs, ros-jazzy-ros-workspace
+Description: Fleet Adapter package for RMF fleets.
