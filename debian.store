@@ -1,1 +1,1 @@
-{"base": "41dba338", "parent": "debian/rolling/rmf_fleet_adapter_python", "previous": "3195e81b", "trim": "", "trimbase": ""}
+{"base": "2c94fb5d", "parent": "debian/jazzy/rmf_fleet_adapter_python", "previous": "db42a822", "trim": "", "trimbase": ""}
