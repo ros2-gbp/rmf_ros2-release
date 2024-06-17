@@ -1,0 +1,38 @@
+ros-jazzy-rmf-charging-schedule (2.7.2-1bookworm) bookworm; urgency=high
+
+
+
+ -- Grey <mxgrey@intrinsic.ai>  Mon, 17 Jun 2024 16:00:00 -0000
+
+ros-jazzy-rmf-charging-schedule (2.7.1-1bookworm) bookworm; urgency=high
+
+  * Fix charging status (#347 <https://github.com/open-rmf/rmf_ros2/pull/347>)
+  * Contributors: Grey
+
+ -- Grey <mxgrey@intrinsic.ai>  Mon, 10 Jun 2024 16:00:00 -0000
+
+ros-jazzy-rmf-charging-schedule (2.7.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Grey <mxgrey@intrinsic.ai>  Fri, 31 May 2024 16:00:00 -0000
+
+ros-jazzy-rmf-charging-schedule (2.6.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Grey <mxgrey@intrinsic.ai>  Tue, 12 Mar 2024 16:00:00 -0000
+
+ros-jazzy-rmf-charging-schedule (2.5.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Grey <mxgrey@intrinsic.ai>  Thu, 21 Dec 2023 16:00:00 -0000
+
+ros-jazzy-rmf-charging-schedule (2.4.0-1bookworm) bookworm; urgency=high
+
+  * First release
+
+ -- Grey <mxgrey@intrinsic.ai>  Thu, 14 Dec 2023 16:00:00 -0000
+
+
