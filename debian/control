@@ -1,0 +1,12 @@
+Source: ros-iron-rmf-traffic-ros2
+Section: misc
+Priority: optional
+Maintainer: Grey <grey@openrobotics.org>
+Build-Depends: debhelper (>= 9.0.0), libeigen3-dev, libproj-dev, libyaml-cpp-dev, nlohmann-json3-dev, ros-iron-ament-cmake, ros-iron-ament-cmake-catch2 <!nocheck>, ros-iron-ament-cmake-uncrustify <!nocheck>, ros-iron-rclcpp, ros-iron-rmf-building-map-msgs, ros-iron-rmf-fleet-msgs, ros-iron-rmf-site-map-msgs, ros-iron-rmf-traffic, ros-iron-rmf-traffic-msgs, ros-iron-rmf-utils, uuid-dev, zlib1g-dev, ros-iron-ros-workspace
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-iron-rmf-traffic-ros2
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libproj-dev, libyaml-cpp-dev, nlohmann-json3-dev, ros-iron-rclcpp, ros-iron-rmf-building-map-msgs, ros-iron-rmf-fleet-msgs, ros-iron-rmf-site-map-msgs, ros-iron-rmf-traffic, ros-iron-rmf-traffic-msgs, ros-iron-rmf-utils, uuid-dev, zlib1g-dev, ros-iron-ros-workspace
+Description: A package containing messages used by the RMF traffic management system.
