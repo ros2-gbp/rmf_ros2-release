@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
   const auto publisher =
     node->create_publisher<Request>(
     rmf_fleet_adapter::InterruptRequestTopicName,
-    rclcpp::SystemDefaultsQoS().keep_last(10));
+    rclcpp::SystemDefaultsQoS());
 
   publisher->publish(request);
 

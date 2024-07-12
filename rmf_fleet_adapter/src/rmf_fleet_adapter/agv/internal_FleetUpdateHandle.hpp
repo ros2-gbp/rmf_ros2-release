@@ -235,26 +235,15 @@ private:
 };
 
 //==============================================================================
-struct ExpectedState
-{
-  RobotContextPtr context;
-  rmf_task::State state;
-};
-
-//==============================================================================
 struct Expectations
 {
-  std::vector<ExpectedState> states;
+  std::vector<rmf_task::State> states;
   std::vector<rmf_task::ConstRequestPtr> pending_requests;
 };
 
 //==============================================================================
-// Map from the robot instance to its proposed assignment of tasks
-using TaskAssignments = std::unordered_map<
-  RobotContextPtr,
-  std::vector<rmf_task::TaskPlanner::Assignment>>;
-
-// Forward declaration of a task allocation job
+// Map task id to pair of <RequestPtr, TaskAssignments>
+using TaskAssignments = rmf_task::TaskPlanner::Assignments;
 class AllocateTasks;
 
 //==============================================================================
@@ -287,8 +276,6 @@ public:
   rmf_task::ConstRequestFactoryPtr idle_task = nullptr;
 
   rmf_utils::optional<rmf_traffic::Duration> default_maximum_delay =
-    std::chrono::nanoseconds(std::chrono::seconds(10));
-  rmf_utils::optional<rmf_traffic::Duration> retreat_to_charger_interval =
     std::chrono::nanoseconds(std::chrono::seconds(10));
 
   AcceptDeliveryRequest accept_delivery = nullptr;
@@ -344,13 +331,6 @@ public:
   // Map to store task id with assignments for BidNotice
   std::unordered_map<std::string, TaskAssignments> bid_notice_assignments = {};
 
-  // This is checked before and after the task reassignment procedure to ensure
-  // that no new task came in from the dispatcher while the reassignment was
-  // being calculated.
-  std::string last_bid_assignment;
-  std::vector<rmf_task::ConstRequestPtr> unassigned_requests;
-  rxcpp::schedulers::worker reassignment_worker;
-
   using BidNoticeMsg = rmf_task_msgs::msg::BidNotice;
 
   using DispatchCmdMsg = rmf_task_msgs::msg::DispatchCommand;
@@ -384,9 +364,6 @@ public:
     auto handle = std::shared_ptr<FleetUpdateHandle>(new FleetUpdateHandle);
     handle->_pimpl = rmf_utils::make_unique_impl<Implementation>(
       Implementation{handle, std::forward<Args>(args)...});
-
-    handle->_pimpl->reassignment_worker =
-      rxcpp::schedulers::make_event_loop().create_worker();
 
     handle->_pimpl->add_standard_tasks();
 
@@ -504,7 +481,7 @@ public:
       rmf_api_msgs::schemas::location_2D,
       rmf_api_msgs::schemas::fleet_log,
       rmf_api_msgs::schemas::log_entry,
-      rmf_api_msgs::schemas::commission,
+      rmf_api_msgs::schemas::commission
     };
 
     for (const auto& schema : schemas)
@@ -642,8 +619,6 @@ public:
 
   void dispatch_command_cb(const DispatchCmdMsg::SharedPtr msg);
 
-  double compute_cost(const TaskAssignments& assignments) const;
-
   std::optional<std::size_t> get_nearest_charger(
     const rmf_traffic::agv::Planner::Start& start);
 
@@ -651,14 +626,7 @@ public:
 
   /// Helper function to check if assignments are valid. An assignment set is
   /// invalid if one of the assignments has already begun execution.
-  bool is_valid_assignments(
-    TaskAssignments& assignments,
-    std::string* report_error = nullptr) const;
-
-  void reassign_dispatched_tasks(
-    std::function<void()> on_success,
-    // argument is a vector of error messages from the planner
-    std::function<void(std::vector<std::string>)> on_failure);
+  bool is_valid_assignments(TaskAssignments& assignments) const;
 
   void publish_fleet_state_topic() const;
 

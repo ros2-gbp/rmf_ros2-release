@@ -16,7 +16,6 @@
 */
 
 #include "internal_RobotUpdateHandle.hpp"
-#include "../TaskManager.hpp"
 
 #include <rmf_traffic_ros2/Time.hpp>
 
@@ -847,18 +846,6 @@ bool RobotContext::waiting_for_charger() const
 }
 
 //==============================================================================
-std::shared_ptr<void> RobotContext::be_charging()
-{
-  return _lock_charging;
-}
-
-//==============================================================================
-bool RobotContext::is_charging() const
-{
-  return _lock_charging.use_count() > 1;
-}
-
-//==============================================================================
 const rxcpp::observable<double>& RobotContext::observe_battery_soc() const
 {
   return _battery_soc_obs;
@@ -974,41 +961,21 @@ std::shared_ptr<TaskManager> RobotContext::task_manager()
 }
 
 //==============================================================================
-void RobotContext::set_commission(RobotUpdateHandle::Commission value)
+bool RobotContext::is_commissioned() const
 {
-  {
-    std::lock_guard<std::mutex> lock(*_commission_mutex);
-    _commission = std::move(value);
-  }
-
-  if (const auto mgr = _task_manager.lock())
-  {
-    if (!_commission.is_performing_idle_behavior())
-    {
-      mgr->_cancel_idle_behavior({"decommissioned"});
-    }
-    else
-    {
-      // We trigger this in case the robot needs to begin its idle behavior.
-      // If it shouldn't perform idle behavior for any reason (e.g. already
-      // performing a task), then this will have no effect.
-      mgr->_begin_next_task();
-    }
-  }
+  return _commissioned;
 }
 
 //==============================================================================
-const RobotUpdateHandle::Commission& RobotContext::commission() const
+void RobotContext::decommission()
 {
-  return _commission;
+  _commissioned = false;
 }
 
 //==============================================================================
-RobotUpdateHandle::Commission RobotContext::copy_commission() const
+void RobotContext::recommission()
 {
-  std::lock_guard<std::mutex> lock(*_commission_mutex);
-  RobotUpdateHandle::Commission copy = _commission;
-  return copy;
+  _commissioned = true;
 }
 
 //==============================================================================
@@ -1079,12 +1046,6 @@ void RobotContext::release_lift()
       "Releasing lift [%s] for [%s]",
       _lift_destination->lift_name.c_str(),
       requester_id().c_str());
-    rmf_lift_msgs::msg::LiftRequest msg;
-    msg.lift_name = _lift_destination->lift_name;
-    msg.request_type = rmf_lift_msgs::msg::LiftRequest::REQUEST_END_SESSION;
-    msg.session_id = requester_id();
-    msg.destination_floor = _lift_destination->destination_floor;
-    _node->lift_request()->publish(msg);
   }
   _lift_destination = nullptr;
   _initial_time_idle_outside_lift = std::nullopt;
@@ -1103,13 +1064,6 @@ const std::unordered_map<std::string, TimeMsg>&
 RobotContext::locked_mutex_groups() const
 {
   return _locked_mutex_groups;
-}
-
-//==============================================================================
-const std::unordered_map<std::string, TimeMsg>&
-RobotContext::requesting_mutex_groups() const
-{
-  return _requesting_mutex_groups;
 }
 
 //==============================================================================
@@ -1170,7 +1124,6 @@ RobotContext::RobotContext(
   _requester_id(
     _itinerary.description().owner() + "/" + _itinerary.description().name()),
   _charging_wp(state.dedicated_charging_waypoint().value()),
-  _lock_charging(std::make_shared<int>(0)),
   _current_task_end_state(state),
   _current_task_id(std::nullopt),
   _task_planner(std::move(task_planner)),
@@ -1539,7 +1492,6 @@ void RobotContext::_check_mutex_groups(
   }
 }
 
-//==============================================================================
 void RobotContext::_retain_mutex_groups(
   const std::unordered_set<std::string>& retain,
   std::unordered_map<std::string, TimeMsg>& groups)
@@ -1639,30 +1591,6 @@ void RobotContext::_publish_mutex_group_requests()
   {
     publish(MutexGroupData{name, time});
   }
-}
-
-//==============================================================================
-void RobotContext::_handle_mutex_group_manual_release(
-  const rmf_fleet_msgs::msg::MutexGroupManualRelease& msg)
-{
-  if (msg.fleet != group())
-    return;
-
-  if (msg.robot != name())
-    return;
-
-  std::unordered_set<std::string> retain;
-  for (const auto& g : _locked_mutex_groups)
-  {
-    retain.insert(g.first);
-  }
-
-  for (const auto& g : msg.release_mutex_groups)
-  {
-    retain.erase(g);
-  }
-
-  retain_mutex_groups(retain);
 }
 
 } // namespace agv

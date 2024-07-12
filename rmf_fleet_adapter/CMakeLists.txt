@@ -11,7 +11,6 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
 find_package(ament_cmake REQUIRED)
-find_package(backward_ros REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(Threads REQUIRED)
@@ -49,9 +48,7 @@ foreach(pkg ${dep_pkgs})
   find_package(${pkg} REQUIRED)
 endforeach()
 
-# Disable uncrustify tests by default.
-set(TEST_UNCRUSTIFY "Off")
-if(BUILD_TESTING AND TEST_UNCRUSTIFY)
+if(BUILD_TESTING)
   find_package(ament_cmake_uncrustify REQUIRED)
   find_file(uncrustify_config_file
     NAMES "rmf_code_style.cfg"

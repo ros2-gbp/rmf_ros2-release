@@ -14,7 +14,6 @@ endif()
 include(GNUInstallDirs)
 
 find_package(ament_cmake REQUIRED)
-find_package(backward_ros REQUIRED)
 find_package(rmf_api_msgs REQUIRED)
 find_package(rmf_traffic REQUIRED)
 find_package(rmf_traffic_ros2 REQUIRED)
@@ -55,22 +54,20 @@ ament_export_targets(rmf_task_ros2 HAS_LIBRARY_TARGET)
 ament_export_dependencies(rmf_traffic rmf_task_msgs rclcpp nlohmann_json)
 
 #===============================================================================
-set(TEST_UNCRUSTIFY "Off")
+
 if(BUILD_TESTING)
   find_package(ament_cmake_catch2 QUIET)
-  if (TEST_UNCRUSTIFY)
-    find_package(ament_cmake_uncrustify REQUIRED)
-    find_file(uncrustify_config_file
-      NAMES "rmf_code_style.cfg"
-      PATHS "${rmf_utils_DIR}/../../../share/rmf_utils/")
+  find_package(ament_cmake_uncrustify REQUIRED)
+  find_file(uncrustify_config_file
+    NAMES "rmf_code_style.cfg"
+    PATHS "${rmf_utils_DIR}/../../../share/rmf_utils/")
 
-    ament_uncrustify(
-      ARGN include src test
-      CONFIG_FILE ${uncrustify_config_file}
-      LANGUAGE C++
-      MAX_LINE_LENGTH 80
-    )
-  endif()
+  ament_uncrustify(
+    ARGN include src test
+    CONFIG_FILE ${uncrustify_config_file}
+    LANGUAGE C++
+    MAX_LINE_LENGTH 80
+  )
 
   file(GLOB_RECURSE unit_test_srcs "test/*.cpp")
 

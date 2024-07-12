@@ -60,7 +60,7 @@ public:
   : rclcpp::Node("dump_test_fleet_states")
   {
     fleet_state_publisher = create_publisher<FleetState>(
-      "/fleet_states", rclcpp::SystemDefaultsQoS().keep_last(10));
+      "/fleet_states", rclcpp::SystemDefaultsQoS());
 
     timer = create_wall_timer(
       std::chrono::milliseconds(period_ms), [&]() { update(); });

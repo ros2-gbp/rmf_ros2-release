@@ -24,6 +24,11 @@
 #include <rmf_utils/impl_ptr.hpp>
 
 #include <memory>
+#include <set>
+#include <queue>
+#include <mutex>
+#include <thread>
+#include <atomic>
 
 namespace rmf_websocket {
 //==============================================================================

@@ -96,7 +96,7 @@ std::shared_ptr<FleetAdapterNode> FleetAdapterNode::make()
 
       node->_fleet_state_subscription =
         node->create_subscription<FleetState>(
-        FleetStateTopicName, rclcpp::SystemDefaultsQoS().keep_last(10),
+        FleetStateTopicName, rclcpp::SystemDefaultsQoS(),
         [self = node.get()](FleetState::UniquePtr msg)
         {
           self->fleet_state_update(std::move(msg));

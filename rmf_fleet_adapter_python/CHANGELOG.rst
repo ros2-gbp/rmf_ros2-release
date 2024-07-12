@@ -2,44 +2,27 @@
 Changelog for package rmf_fleet_adapter_python
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.7.2 (2024-06-18)
+2.2.6 (2024-07-12)
 ------------------
 
-2.7.1 (2024-06-11)
+2.2.5 (2023-12-22)
 ------------------
 
-2.7.0 (2024-06-01)
-------------------
-* Add fleet-level reassign dispatched tasks API (`#348 <https://github.com/open-rmf/rmf_ros2/pull/348>`_)
-* Disable automatic retreat (`#330 <https://github.com/open-rmf/rmf_ros2/pull/330>`_)
-* Stabilize commissioning feature (`#338 <https://github.com/open-rmf/rmf_ros2/pull/338>`_)
-* Add all_known_lifts in Graph binding (`#336 <https://github.com/open-rmf/rmf_ros2/pull/336>`_)
-* Add Speed Limit Requests (`#335 <https://github.com/open-rmf/rmf_ros2/pull/335>`_)
-* Contributors: cwrx777, Grey, Pranay Shirodkar, Xiyu, Yadunund
-
-2.6.0 (2024-03-13)
-------------------
-* add in_lift readonly property in Graph::Waypoint binding. (`#326 <https://github.com/open-rmf/rmf_ros2/pull/326>`_)
-* Contributors: cwrx777
-
-2.5.0 (2023-12-22)
+2.2.4 (2023-12-15)
 ------------------
 
-2.4.0 (2023-12-15)
+2.2.3 (2023-09-20)
+------------------
+* EasyFullControl API (`#302 <https://github.com/open-rmf/rmf_ros2/pull/302>`_)
+* Contributors: Luca Della Vedova, Michael X. Grey, Xiyu, Yadunund
+
+2.2.2 (2023-09-11)
 ------------------
 
-2.3.2 (2023-08-28)
+2.2.1 (2023-08-10)
 ------------------
-* EasyFullControl API (`#235 <https://github.com/open-rmf/rmf_ros2/pull/235>`_)
-* Contributors: Grey, Luca Della Vedova, Xiyu, Yadunund
-
-2.3.1 (2023-08-10)
-------------------
-* Adding initiator and request time to booking (`#267 <https://github.com/open-rmf/rmf_ros2/pull/267>`_)
-* Contributors: Aaron Chong
-
-2.3.0 (2023-06-08)
-------------------
+* Adding initiator and request time to booking (`#285 <https://github.com/open-rmf/rmf_ros2/pull/285>`_)
+* Contributors: Aaron Chong, Yadunund
 
 2.2.0 (2023-06-06)
 ------------------
