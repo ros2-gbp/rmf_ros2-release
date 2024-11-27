@@ -63,6 +63,7 @@ using RobotInterruption = agv::RobotUpdateHandle::Interruption;
 using IssueTicket = agv::RobotUpdateHandle::IssueTicket;
 using Commission = agv::RobotUpdateHandle::Commission;
 using Stubbornness = agv::RobotUpdateHandle::Unstable::Stubbornness;
+using LiftDestination = agv::RobotUpdateHandle::LiftDestination;
 
 void bind_types(py::module&);
 void bind_graph(py::module&);
@@ -144,8 +145,12 @@ PYBIND11_MODULE(rmf_adapter, m) {
     py::overload_cast<rmf_traffic::agv::Plan::StartSet>(
       &agv::RobotUpdateHandle::update_position),
     py::arg("start_set"))
+  .def("use_parking_reservation_system", &agv::RobotUpdateHandle::use_parking_reservation_system,
+    py::arg("enable"))
   .def("set_charger_waypoint", &agv::RobotUpdateHandle::set_charger_waypoint,
     py::arg("charger_wp"))
+  .def("set_finishing_request", &agv::RobotUpdateHandle::set_finishing_request,
+    py::arg("finishing_request"))
   .def("update_battery_soc", &agv::RobotUpdateHandle::update_battery_soc,
     py::arg("battery_soc"))
   .def("override_status", &agv::RobotUpdateHandle::override_status,
@@ -254,6 +259,21 @@ PYBIND11_MODULE(rmf_adapter, m) {
       self.unstable().debug_positions(on);
     },
     py::arg("on"))
+  .def("unstable_quiet_cancel_task",
+    [&](agv::RobotUpdateHandle& self,
+    std::string task_id,
+    std::vector<std::string> labels,
+    std::function<void(bool task_was_found)>on_cancellation)
+    {
+      self.unstable().quiet_cancel_task(
+        task_id,
+        labels,
+        on_cancellation
+      );
+    },
+    py::arg("task_id"),
+    py::arg("labels"),
+    py::arg("on_cancellation"))
   .def("set_action_executor",
     &agv::RobotUpdateHandle::set_action_executor,
     py::arg("action_executor"))
@@ -299,7 +319,9 @@ PYBIND11_MODULE(rmf_adapter, m) {
   .def("commission",
     &agv::RobotUpdateHandle::commission)
   .def("reassign_dispatched_tasks",
-    &agv::RobotUpdateHandle::reassign_dispatched_tasks);
+    &agv::RobotUpdateHandle::reassign_dispatched_tasks)
+  .def("lift_destination",
+    &agv::RobotUpdateHandle::lift_destination);
 
   // ACTION EXECUTOR   =======================================================
   auto m_robot_update_handle = m.def_submodule("robot_update_handle");
@@ -339,6 +361,7 @@ PYBIND11_MODULE(rmf_adapter, m) {
     py::arg("hold") = 0.0)
   .def("finished", &ActionExecution::finished)
   .def("okay", &ActionExecution::okay)
+  .def("set_automatic_cancel", &ActionExecution::set_automatic_cancel, py::arg("on"))
   .def_property_readonly("identifier", &ActionExecution::identifier);
 
   // ROBOT INTERRUPTION   ====================================================
@@ -383,6 +406,16 @@ PYBIND11_MODULE(rmf_adapter, m) {
     m_robot_update_handle, "Stubbornness")
   .def("release",
     &Stubbornness::release);
+
+  // LiftDestination ======================================================
+  py::class_<LiftDestination>(
+    m_robot_update_handle, "LiftDestination")
+  .def_property_readonly(
+    "lift",
+    &LiftDestination::lift)
+  .def_property_readonly(
+    "level",
+    &LiftDestination::level);
 
   // FLEETUPDATE HANDLE ======================================================
   py::class_<agv::FleetUpdateHandle,
@@ -850,7 +883,11 @@ PYBIND11_MODULE(rmf_adapter, m) {
   .def_property(
     "compatible_chargers",
     &agv::EasyFullControl::RobotConfiguration::compatible_chargers,
-    &agv::EasyFullControl::RobotConfiguration::set_compatible_chargers);
+    &agv::EasyFullControl::RobotConfiguration::set_compatible_chargers)
+  .def_property(
+    "finishing_request",
+    &agv::EasyFullControl::RobotConfiguration::finishing_request,
+    &agv::EasyFullControl::RobotConfiguration::set_finishing_request);
 
   py::class_<agv::EasyFullControl::RobotCallbacks>(m_easy_full_control, "RobotCallbacks")
   .def(py::init<

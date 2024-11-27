@@ -27,8 +27,7 @@ namespace lift_supervisor {
 Node::Node()
 : rclcpp::Node("rmf_lift_supervisor")
 {
-  const auto default_qos =
-    rclcpp::SystemDefaultsQoS().durability_volatile().keep_last(100).reliable();
+  const auto default_qos = rclcpp::SystemDefaultsQoS().keep_last(10);
   const auto transient_qos = rclcpp::SystemDefaultsQoS()
     .reliable().keep_last(100).transient_local();
 
@@ -48,9 +47,6 @@ Node::Node()
     {
       _lift_state_update(std::move(msg));
     });
-
-  _emergency_notice_pub = create_publisher<EmergencyNotice>(
-    rmf_traffic_ros2::EmergencyTopicName, default_qos);
 }
 
 //==============================================================================
@@ -69,14 +65,12 @@ void Node::_adapter_lift_request_update(LiftRequest::UniquePtr msg)
   {
     if (curr_request->session_id == msg->session_id)
     {
-      msg->request_time = this->now();
-      _lift_request_pub->publish(*msg);
       if (msg->request_type != LiftRequest::REQUEST_END_SESSION)
-      {
         curr_request = std::move(msg);
-      }
       else
       {
+        msg->request_time = this->now();
+        _lift_request_pub->publish(*msg);
         RCLCPP_INFO(
           this->get_logger(),
           "[%s] Published end lift session from lift supervisor",
@@ -88,7 +82,6 @@ void Node::_adapter_lift_request_update(LiftRequest::UniquePtr msg)
   }
   else
   {
-    _lift_request_pub->publish(*msg);
     if (msg->request_type != LiftRequest::REQUEST_END_SESSION)
     {
       curr_request = std::move(msg);
@@ -128,19 +121,6 @@ void Node::_lift_state_update(LiftState::UniquePtr msg)
     request.request_type = LiftRequest::REQUEST_END_SESSION;
     _lift_request_pub->publish(request);
   }
-
-  // For now, we do not need to publish this.
-
-//  std_msgs::msg::Bool emergency_msg;
-//  emergency_msg.data = false;
-
-//  if (LiftState::MODE_FIRE == msg->current_mode
-//      || LiftState::MODE_EMERGENCY == msg->current_mode)
-//  {
-//    emergency_msg.data = true;
-//  }
-
-//  _emergency_notice_pub->publish(emergency_msg);
 }
 
 } // namespace lift_supervisor
