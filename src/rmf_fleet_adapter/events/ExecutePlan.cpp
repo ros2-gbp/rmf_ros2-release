@@ -29,6 +29,8 @@
 
 #include "../agv/internal_EasyFullControl.hpp"
 
+#include "../agv/internal_RobotUpdateHandle.hpp"
+
 #include <rmf_task_sequence/events/Bundle.hpp>
 
 namespace rmf_fleet_adapter {
@@ -515,6 +517,10 @@ std::optional<EventGroupInfo> search_for_lift_group(
         return std::nullopt;
       }
 
+      auto final_lift_destination =
+        agv::RobotUpdateHandle::LiftDestination::Implementation::make(
+          lift_name, lift_end->destination());
+
       auto category = "Take [lift:" + lift_name
         + "] to [floor:" + lift_end->destination() + "]";
 
@@ -534,6 +540,14 @@ std::optional<EventGroupInfo> search_for_lift_group(
 
         if (it->phase)
         {
+          if (auto* lift_request = dynamic_cast<RequestLift*>(it->phase.get()))
+          {
+            // Inject the final lift destination information into every lift
+            // request in this group.
+            lift_request->data().final_lift_destination =
+              final_lift_destination;
+          }
+
           lift_group.push_back(
             [legacy = it->phase, context, event_id](UpdateFn update)
             {
@@ -650,6 +664,23 @@ public:
   void execute(const LiftDoorOpen& e) final {}
   void execute(const LiftSessionEnd& e) final {}
 };
+
+//==============================================================================
+void print_events(
+  std::stringstream& seq,
+  rmf_task::Event::ConstStatePtr state,
+  std::size_t depth
+) {
+    rmf_task::VersionedString::Reader reader;
+    seq << "\n -- ";
+    for (std::size_t i=0; i < depth; ++i) {
+      seq << "  ";
+    }
+    seq << "[" << state << "] " << *reader.read(state->name()) << ": " << *reader.read(state->detail());
+    for (const auto& d : state->dependencies()) {
+      print_events(seq, d, depth+1);
+    }
+}
 
 //==============================================================================
 std::optional<ExecutePlan> ExecutePlan::make(

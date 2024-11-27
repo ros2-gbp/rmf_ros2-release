@@ -51,6 +51,7 @@
 #include <stdexcept>
 
 #include <rmf_fleet_adapter/schemas/place.hpp>
+#include <rmf_fleet_adapter/schemas/priority_description__binary.hpp>
 #include <rmf_api_msgs/schemas/task_request.hpp>
 
 namespace rmf_fleet_adapter {
@@ -241,38 +242,30 @@ std::shared_ptr<rmf_task::Request> FleetUpdateHandle::Implementation::convert(
   const auto p_it = request_msg.find("priority");
   if (p_it != request_msg.end())
   {
-    // Assume the schema is not valid until we have successfully parsed it.
-    bool valid_schema = false;
-    // TODO(YV): Validate with priority_description_Binary.json
-    if (p_it->contains("type") && p_it->contains("value"))
+    try
     {
-      const auto& p_type = (*p_it)["type"];
-      if (p_type.is_string() && p_type.get<std::string>() == "binary")
-      {
-        const auto& p_value = (*p_it)["value"];
-        if (p_value.is_number_integer())
-        {
-          // The message matches the expected schema, so now we can mark it as
-          // valid.
-          valid_schema = true;
+      static const auto validator =
+        make_validator(rmf_fleet_adapter::schemas::priority_description__binary);
+      validator.validate(*p_it);
 
-          // If we have an integer greater than 0, we assign a high priority.
-          // Else the priority will default to low.
-          if (p_value.get<uint64_t>() > 0)
-          {
-            priority = rmf_task::BinaryPriorityScheme::make_high_priority();
-          }
-        }
+      const auto& p_value = (*p_it)["value"];
+      if (p_value.get<uint64_t>() > 0)
+      {
+        priority = rmf_task::BinaryPriorityScheme::make_high_priority();
       }
     }
-
-    if (!valid_schema)
+    catch (const std::exception& e)
     {
-      errors.push_back(
-        make_error_str(
-          4, "Unsupported type",
-          "Fleet [" + name + "] does not support priority request: "
-          + p_it->dump() + "\nDefaulting to low binary priority."));
+      const std::string error_str = make_error_str(
+        4, "Unsupported type",
+        "Fleet [" + name + "] does not support priority request: "
+        + p_it->dump() + "\nDefaulting to low binary priority.");
+      RCLCPP_ERROR(
+        node->get_logger(),
+        "Malformed incoming priority description: %s\n%s",
+        e.what(),
+        error_str.c_str());
+      errors.push_back(error_str);
     }
   }
 
@@ -469,7 +462,7 @@ void FleetUpdateHandle::Implementation::bid_notice_cb(
     RCLCPP_INFO(
       node->get_logger(),
       "Fleet [%s] does not have any robots to accept task [%s]. Use "
-      "FleetUpdateHadndle::add_robot(~) to add robots to this fleet. ",
+      "FleetUpdateHandle::add_robot(~) to add robots to this fleet. ",
       name.c_str(), task_id.c_str());
     return;
   }
@@ -1233,151 +1226,160 @@ void FleetUpdateHandle::Implementation::update_fleet() const
 //==============================================================================
 void FleetUpdateHandle::Implementation::update_fleet_state() const
 {
-  // Publish to API server
-  if (broadcast_client)
+  nlohmann::json fleet_state_update_msg;
+  fleet_state_update_msg["type"] = "fleet_state_update";
+  auto& fleet_state_msg = fleet_state_update_msg["data"];
+  fleet_state_msg["name"] = name;
+  auto& robots = fleet_state_msg["robots"];
+  robots = std::unordered_map<std::string, nlohmann::json>();
+  for (const auto& [context, mgr] : task_managers)
   {
-    nlohmann::json fleet_state_update_msg;
-    fleet_state_update_msg["type"] = "fleet_state_update";
-    auto& fleet_state_msg = fleet_state_update_msg["data"];
-    fleet_state_msg["name"] = name;
-    auto& robots = fleet_state_msg["robots"];
-    robots = std::unordered_map<std::string, nlohmann::json>();
-    for (const auto& [context, mgr] : task_managers)
+    const auto& name = context->name();
+    nlohmann::json& json = robots[name];
+    json["name"] = name;
+    json["status"] = mgr->robot_status();
+    json["task_id"] = mgr->current_task_id().value_or("");
+    json["unix_millis_time"] =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+      context->now().time_since_epoch()).count();
+    json["battery"] = context->current_battery_soc();
+
+    const auto location_msg = convert_location(*context);
+    if (location_msg.has_value())
     {
-      const auto& name = context->name();
-      nlohmann::json& json = robots[name];
-      json["name"] = name;
-      json["status"] = mgr->robot_status();
-      json["task_id"] = mgr->current_task_id().value_or("");
-      json["unix_millis_time"] =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-        context->now().time_since_epoch()).count();
-      json["battery"] = context->current_battery_soc();
-
-      const auto location_msg = convert_location(*context);
-      if (location_msg.has_value())
-      {
-        nlohmann::json& location = json["location"];
-        location["map"] = location_msg->level_name;
-        location["x"] = location_msg->x;
-        location["y"] = location_msg->y;
-        location["yaw"] = location_msg->yaw;
-      }
-
-      std::lock_guard<std::mutex> lock(context->reporting().mutex());
-      const auto& issues = context->reporting().open_issues();
-      auto& issues_msg = json["issues"];
-      issues_msg = std::vector<nlohmann::json>();
-      for (const auto& issue : issues)
-      {
-        nlohmann::json issue_msg;
-        issue_msg["category"] = issue->category;
-        issue_msg["detail"] = issue->detail;
-        issues_msg.push_back(std::move(issue_msg));
-      }
-
-      const auto& commission = context->commission();
-      nlohmann::json commission_json;
-      commission_json["dispatch_tasks"] =
-        commission.is_accepting_dispatched_tasks();
-      commission_json["direct_tasks"] = commission.is_accepting_direct_tasks();
-      commission_json["idle_behavior"] =
-        commission.is_performing_idle_behavior();
-
-      json["commission"] = commission_json;
-
-      nlohmann::json mutex_groups_json;
-      std::vector<std::string> locked_mutex_groups;
-      for (const auto& g : context->locked_mutex_groups())
-      {
-        locked_mutex_groups.push_back(g.first);
-      }
-      mutex_groups_json["locked"] = std::move(locked_mutex_groups);
-
-      std::vector<std::string> requesting_mutex_groups;
-      for (const auto& g : context->requesting_mutex_groups())
-      {
-        requesting_mutex_groups.push_back(g.first);
-      }
-      mutex_groups_json["requesting"] = std::move(requesting_mutex_groups);
-
-      json["mutex_groups"] = std::move(mutex_groups_json);
+      nlohmann::json& location = json["location"];
+      location["map"] = location_msg->level_name;
+      location["x"] = location_msg->x;
+      location["y"] = location_msg->y;
+      location["yaw"] = location_msg->yaw;
     }
 
-    try
+    std::lock_guard<std::mutex> lock(context->reporting().mutex());
+    const auto& issues = context->reporting().open_issues();
+    auto& issues_msg = json["issues"];
+    issues_msg = std::vector<nlohmann::json>();
+    for (const auto& issue : issues)
+    {
+      nlohmann::json issue_msg;
+      issue_msg["category"] = issue->category;
+      issue_msg["detail"] = issue->detail;
+      issues_msg.push_back(std::move(issue_msg));
+    }
+
+    const auto& commission = context->commission();
+    nlohmann::json commission_json;
+    commission_json["dispatch_tasks"] =
+      commission.is_accepting_dispatched_tasks();
+    commission_json["direct_tasks"] = commission.is_accepting_direct_tasks();
+    commission_json["idle_behavior"] =
+      commission.is_performing_idle_behavior();
+
+    json["commission"] = commission_json;
+
+    nlohmann::json mutex_groups_json;
+    std::vector<std::string> locked_mutex_groups;
+    for (const auto& g : context->locked_mutex_groups())
+    {
+      locked_mutex_groups.push_back(g.first);
+    }
+    mutex_groups_json["locked"] = std::move(locked_mutex_groups);
+
+    std::vector<std::string> requesting_mutex_groups;
+    for (const auto& g : context->requesting_mutex_groups())
+    {
+      requesting_mutex_groups.push_back(g.first);
+    }
+    mutex_groups_json["requesting"] = std::move(requesting_mutex_groups);
+
+    json["mutex_groups"] = std::move(mutex_groups_json);
+  }
+
+  try
+  {
+    std::unique_lock<std::mutex> lock(*update_callback_mutex);
+    if (update_callback)
+      update_callback(fleet_state_update_msg);
+
+    // Publish to API server
+    if (broadcast_client)
     {
       static const auto validator =
         make_validator(rmf_api_msgs::schemas::fleet_state_update);
-
       validator.validate(fleet_state_update_msg);
 
-      std::unique_lock<std::mutex> lock(*update_callback_mutex);
-      if (update_callback)
-        update_callback(fleet_state_update_msg);
       broadcast_client->publish(fleet_state_update_msg);
     }
-    catch (const std::exception& e)
-    {
-      RCLCPP_ERROR(
-        node->get_logger(),
-        "Malformed outgoing fleet state json message: %s\nMessage:\n%s",
-        e.what(),
-        fleet_state_update_msg.dump(2).c_str());
-    }
+
+    FleetStateUpdateMsg update_msg;
+    update_msg.data = fleet_state_update_msg.dump();
+    fleet_state_update_pub->publish(update_msg);
+  }
+  catch (const std::exception& e)
+  {
+    RCLCPP_ERROR(
+      node->get_logger(),
+      "Malformed outgoing fleet state json message: %s\nMessage:\n%s",
+      e.what(),
+      fleet_state_update_msg.dump(2).c_str());
   }
 }
 
 //==============================================================================
 void FleetUpdateHandle::Implementation::update_fleet_logs() const
 {
-  if (broadcast_client)
+  nlohmann::json fleet_log_update_msg;
+  fleet_log_update_msg["type"] = "fleet_log_update";
+  auto& fleet_log_msg = fleet_log_update_msg["data"];
+  fleet_log_msg["name"] = name;
+  // TODO(MXG): fleet_log_msg["log"]
+  auto& robots_msg = fleet_log_msg["robots"];
+  robots_msg = std::unordered_map<std::string, nlohmann::json>();
+  for (const auto& [context, _] : task_managers)
   {
-    nlohmann::json fleet_log_update_msg;
-    fleet_log_update_msg["type"] = "fleet_log_update";
-    auto& fleet_log_msg = fleet_log_update_msg["data"];
-    fleet_log_msg["name"] = name;
-    // TODO(MXG): fleet_log_msg["log"]
-    auto& robots_msg = fleet_log_msg["robots"];
-    robots_msg = std::unordered_map<std::string, nlohmann::json>();
-    for (const auto& [context, _] : task_managers)
+    auto robot_log_msg_array = std::vector<nlohmann::json>();
+
+    std::lock_guard<std::mutex> lock(context->reporting().mutex());
+    const auto& log = context->reporting().log();
+    for (const auto& entry : log_reader.read(log.view()))
+      robot_log_msg_array.push_back(log_to_json(entry));
+
+    if (!robot_log_msg_array.empty())
+      robots_msg[context->name()] = std::move(robot_log_msg_array);
+  }
+
+  if (robots_msg.empty())
+  {
+    // No new logs to report
+    return;
+  }
+
+  try
+  {
+    static const auto validator =
+      make_validator(rmf_api_msgs::schemas::fleet_log_update);
+
+    validator.validate(fleet_log_update_msg);
+
+    std::unique_lock<std::mutex> lock(*update_callback_mutex);
+    if (update_callback)
+      update_callback(fleet_log_update_msg);
+
+    if (broadcast_client)
     {
-      auto robot_log_msg_array = std::vector<nlohmann::json>();
-
-      std::lock_guard<std::mutex> lock(context->reporting().mutex());
-      const auto& log = context->reporting().log();
-      for (const auto& entry : log_reader.read(log.view()))
-        robot_log_msg_array.push_back(log_to_json(entry));
-
-      if (!robot_log_msg_array.empty())
-        robots_msg[context->name()] = std::move(robot_log_msg_array);
-    }
-
-    if (robots_msg.empty())
-    {
-      // No new logs to report
-      return;
-    }
-
-    try
-    {
-      static const auto validator =
-        make_validator(rmf_api_msgs::schemas::fleet_log_update);
-
-      validator.validate(fleet_log_update_msg);
-
-      std::unique_lock<std::mutex> lock(*update_callback_mutex);
-      if (update_callback)
-        update_callback(fleet_log_update_msg);
       broadcast_client->publish(fleet_log_update_msg);
     }
-    catch (const std::exception& e)
-    {
-      RCLCPP_ERROR(
-        node->get_logger(),
-        "Malformed outgoing fleet log json message: %s\nMessage:\n%s",
-        e.what(),
-        fleet_log_update_msg.dump(2).c_str());
-    }
+
+    FleetLogUpdateMsg update_msg;
+    update_msg.data = fleet_log_update_msg.dump();
+    fleet_log_update_pub->publish(update_msg);
+  }
+  catch (const std::exception& e)
+  {
+    RCLCPP_ERROR(
+      node->get_logger(),
+      "Malformed outgoing fleet log json message: %s\nMessage:\n%s",
+      e.what(),
+      fleet_log_update_msg.dump(2).c_str());
   }
 }
 
@@ -2622,7 +2624,9 @@ bool FleetUpdateHandle::set_task_planner_params(
         for (const auto& t : self->_pimpl->task_managers)
         {
           t.first->task_planner(self->_pimpl->task_planner);
-          t.second->set_idle_task(idle_task);
+          // Skip setting idle task if there exists a robot-specific behavior
+          if (!t.first->robot_finishing_request())
+            t.second->set_idle_task(idle_task);
         }
       });
 
