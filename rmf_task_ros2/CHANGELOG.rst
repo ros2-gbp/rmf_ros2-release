@@ -2,32 +2,49 @@
 Changelog for package rmf_task_ros2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.2.7 (2024-11-15)
+2.9.0 (2024-11-27)
 ------------------
-
-2.2.6 (2024-07-12)
-------------------
-* Fix incorrect std rounding function used when generating timestamp strings for task ID `#370 <https://github.com/open-rmf/rmf_ros2/issues/370>`_)
+* Publish fleet and task updates over ROS 2 if websocket is not provided (`#383 <https://github.com/open-rmf/rmf_ros2/issues/383>`_)
+* Fix incorrect std rounding function used when generating timestamp strings for task ID (`#366 <https://github.com/open-rmf/rmf_ros2/issues/366>`_)
 * Contributors: Aaron Chong
 
-2.2.5 (2023-12-22)
+2.8.0 (2024-06-12)
 ------------------
 
-2.2.4 (2023-12-15)
+2.7.1 (2024-06-11)
 ------------------
 
-2.2.3 (2023-09-20)
+2.7.0 (2024-06-01)
+------------------
+* Fix race condition for ingesting/dispensing and disable uncrustify tests by default (`#362 <https://github.com/open-rmf/rmf_ros2/pull/362>`_)
+* Dispatcher only use websockets when dispatch fails (`#355 <https://github.com/open-rmf/rmf_ros2/pull/355>`_)
+* Contributors: Aaron Chong, Grey, Luca Della Vedova, Yadunund
+
+2.6.0 (2024-03-13)
+------------------
+* Add Backward-ROS for improved logging in event of segfaults (`#327 <https://github.com/open-rmf/rmf_ros2/pull/327>`_)
+* Explicitly specify all qos depth (`#323 <https://github.com/open-rmf/rmf_ros2/pull/323>`_)
+* Adds an option to generate unique hex strings for new task ids, fix time stamp logic (`#319 <https://github.com/open-rmf/rmf_ros2/pull/319>`_)
+* Contributors: Aaron Chong, Arjo Chakravarty, Teo Koon Peng
+
+2.5.0 (2023-12-22)
 ------------------
 
-2.2.2 (2023-09-11)
+2.4.0 (2023-12-15)
 ------------------
-* Improve linking time (`#300 <https://github.com/open-rmf/rmf_ros2/pull/300>`_)
-* Contributors: Grey, Luca Della Vedova, Yadunund
 
-2.2.1 (2023-08-10)
+2.3.2 (2023-08-28)
 ------------------
-* Adding initiator and request time to booking (`#285 <https://github.com/open-rmf/rmf_ros2/pull/285>`_)
-* Contributors: Aaron Chong, Yadunund
+* Improve linking time (`#297 <https://github.com/open-rmf/rmf_ros2/pull/297>`_)
+* Contributors: Grey, Luca Della Vedova
+
+2.3.1 (2023-08-10)
+------------------
+* Adding initiator and request time to booking (`#267 <https://github.com/open-rmf/rmf_ros2/pull/267>`_)
+* Contributors: Aaron Chong
+
+2.3.0 (2023-06-08)
+------------------
 
 2.2.0 (2023-06-06)
 ------------------

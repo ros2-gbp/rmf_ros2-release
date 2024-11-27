@@ -73,7 +73,7 @@ std::shared_ptr<FleetAdapterNode> FleetAdapterNode::make()
       // Don't subscribe until everything else is ready
       node->_fleet_state_subscription =
         node->create_subscription<FleetState>(
-        FleetStateTopicName, rclcpp::SystemDefaultsQoS(),
+        FleetStateTopicName, rclcpp::SystemDefaultsQoS().keep_last(10),
         [self = node.get()](FleetState::UniquePtr msg)
         {
           self->fleet_state_update(std::move(msg));
@@ -395,6 +395,16 @@ bool FleetAdapterNode::handle_delay(
   }
 
   entry.schedule->push_delay(time_difference);
+
+  const auto route_size = entry.route->trajectory().size();
+  const auto remaining_path_size = state.path.size();
+  if (route_size > remaining_path_size)
+  {
+    entry.schedule->participant().reached(
+      entry.schedule->participant().current_plan_id(),
+      0,
+      route_size - remaining_path_size - 1);
+  }
 
   // Return true to indicate that the delay has been handled.
   return true;

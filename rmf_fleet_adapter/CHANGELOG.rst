@@ -2,43 +2,89 @@
 Changelog for package rmf_fleet_adapter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.2.7 (2024-11-15)
+2.9.0 (2024-11-27)
 ------------------
-* Backport lift release fixes to Iron (`#390 <https://github.com/open-rmf/rmf_ros2/issues/390>`_)
+* Add reached API to read-only fleet adapter (`#387 <https://github.com/open-rmf/rmf_ros2/issues/387>`_)
+* Fix lift disruption issue (`#393 <https://github.com/open-rmf/rmf_ros2/issues/393>`_)
+* Allow automatic action cancellation to be toggled (`#392 <https://github.com/open-rmf/rmf_ros2/issues/392>`_)
+* Adds a simple parking spot management system.  (`#325 <https://github.com/open-rmf/rmf_ros2/issues/325>`_)
+* Publish fleet and task updates over ROS 2 if websocket is not provided (`#383 <https://github.com/open-rmf/rmf_ros2/issues/383>`_)
+* Allow robot-specific finishing request and specify parking spots (`#379 <https://github.com/open-rmf/rmf_ros2/issues/379>`_)
+* Issue relocalization command if the robot is on the wrong map (`#316 <https://github.com/open-rmf/rmf_ros2/issues/316>`_)
+* set request_time in lift end session request. (`#385 <https://github.com/open-rmf/rmf_ros2/issues/385>`_)
+* Update _last_active_task_time if robot is executing task (`#384 <https://github.com/open-rmf/rmf_ros2/issues/384>`_)
+* Populate `Booking.Priority`, added schema to validate `Priority` (`#381 <https://github.com/open-rmf/rmf_ros2/issues/381>`_)
+* Emergency trigger to use transient local qos (`#341 <https://github.com/open-rmf/rmf_ros2/issues/341>`_)
+* Add a timeout before automatically releasing lift (`#369 <https://github.com/open-rmf/rmf_ros2/issues/369>`_)
+* Configure strict lanes (`#367 <https://github.com/open-rmf/rmf_ros2/issues/367>`_)
+* Only fail on_cancel deserializations when none of the activities are possible (`#378 <https://github.com/open-rmf/rmf_ros2/issues/378>`_)
+* Fix a minor typo in fleet adapter error log (`#307 <https://github.com/open-rmf/rmf_ros2/issues/307>`_)
+* Provide an API that says the robot's lift destination (`#376 <https://github.com/open-rmf/rmf_ros2/issues/376>`_)
+* Populate LiftProperties for Destination in localize callbacks (`#373 <https://github.com/open-rmf/rmf_ros2/issues/373>`_)
+* Revert "Event based lift / door logic (`#320 <https://github.com/open-rmf/rmf_ros2/issues/320>`_)" (`#372 <https://github.com/open-rmf/rmf_ros2/issues/372>`_)
+* Update with new RobotMode field (`#345 <https://github.com/open-rmf/rmf_ros2/issues/345>`_)
+* Quiet cancel API (`#357 <https://github.com/open-rmf/rmf_ros2/issues/357>`_)
+* Contributors: Aaron Chong, Arjo Chakravarty, Grey, Luca Della Vedova, Xiyu, cwrx777
+
+2.8.0 (2024-06-12)
+------------------
+
+2.7.1 (2024-06-11)
+------------------
+* Fix charging status (`#347 <https://github.com/open-rmf/rmf_ros2/pull/347>`_)
 * Contributors: Grey
 
-2.2.6 (2024-07-12)
+2.7.0 (2024-06-01)
 ------------------
-* Filter DoorOpen insertion by map name (`#354 <https://github.com/open-rmf/rmf_ros2/issues/354>`_)
-* Fix schema dictionary used during robot status override (`#352 <https://github.com/open-rmf/rmf_ros2/issues/352>`_)
-* Fix schema loading (`#344 <https://github.com/open-rmf/rmf_ros2/issues/344>`_)
-* Contributors: Grey
+* Fix race condition for ingesting/dispensing and disable uncrustify tests by default (`#362 <https://github.com/open-rmf/rmf_ros2/pull/362>`_)
+* Event based lift / door logic (`#320 <https://github.com/open-rmf/rmf_ros2/pull/320>`_)
+* Filter DoorOpen insertion by map name (`#353 <https://github.com/open-rmf/rmf_ros2/pull/353>`_)
+* Fix schema dictionary used during robot status override (`#349 <https://github.com/open-rmf/rmf_ros2/pull/349>`_)
+* Add fleet-level reassign dispatched tasks API (`#348 <https://github.com/open-rmf/rmf_ros2/pull/348>`_)
+* Automatically begin or cancel idle behavior when commission changes (`#346 <https://github.com/open-rmf/rmf_ros2/pull/346>`_)
+* Disable automatic retreat (`#330 <https://github.com/open-rmf/rmf_ros2/pull/330>`_)
+* Manual release of mutex groups (`#339 <https://github.com/open-rmf/rmf_ros2/pull/339>`_)
+* Stabilize commissioning feature (`#338 <https://github.com/open-rmf/rmf_ros2/pull/338>`_)
+* Release other mutexes if robot started charging (`#334 <https://github.com/open-rmf/rmf_ros2/pull/334>`_)
+* Support labels in booking information (`#328 <https://github.com/open-rmf/rmf_ros2/pull/328>`_)
+* Fix interaction between emergency pullover and finishing task (`#333 <https://github.com/open-rmf/rmf_ros2/pull/333>`_)
+* Contributors: Aaron Chong, Grey, Luca Della Vedova, Xiyu, Yadunund
 
-2.2.5 (2023-12-22)
+2.6.0 (2024-03-13)
+------------------
+* Removes a line of dead code (`#322 <https://github.com/open-rmf/rmf_ros2/pull/322>`_)
+* include cstdint header (`#331 <https://github.com/open-rmf/rmf_ros2/pull/331>`_)
+* Add Backward-ROS for improved logging in event of segfaults (`#327 <https://github.com/open-rmf/rmf_ros2/pull/327>`_)
+* Explicitly specify all qos depth (`#323 <https://github.com/open-rmf/rmf_ros2/pull/323>`_)
+* Add support of fleet-level task (`#317 <https://github.com/open-rmf/rmf_ros2/pull/317>`_)
+* Fix minor logging error (`#318 <https://github.com/open-rmf/rmf_ros2/pull/318>`_)
+* Contributors: Arjo Chakravarty, Teo Koon Peng, Yadunund, cwrx777
+
+2.5.0 (2023-12-22)
 ------------------
 * Fix edge case when starting on a lane (`#312 <https://github.com/open-rmf/rmf_ros2/pull/312>`_)
 * Update `GoToPlace` to allow finding nearest spot (`#308 <https://github.com/open-rmf/rmf_ros2/pull/308>`_)
 * Contributors: Arjo Chakravarty, Grey
 
-2.2.4 (2023-12-15)
+2.4.0 (2023-12-15)
 ------------------
 * Mutex Groups, localization hook, dynamic charging, and new graph elements (`#310 <https://github.com/open-rmf/rmf_ros2/pull/310>`_)
 
-2.2.3 (2023-09-20)
+2.3.2 (2023-08-28)
 ------------------
-* EasyFullControl API (`#302 <https://github.com/open-rmf/rmf_ros2/pull/302>`_)
-* Contributors: Luca Della Vedova, Michael X. Grey, Xiyu, Yadunund
+* Improve linking time (`#297 <https://github.com/open-rmf/rmf_ros2/pull/297>`_)
+* EasyFullControl API (`#235 <https://github.com/open-rmf/rmf_ros2/pull/235>`_)
+* Contributors: Grey, Luca Della Vedova, Xiyu, Yadunund
 
-2.2.2 (2023-09-11)
+2.3.1 (2023-08-10)
 ------------------
-* Improve linking time (`#300 <https://github.com/open-rmf/rmf_ros2/pull/300>`_)
-* Contributors: Grey, Luca Della Vedova, Yadunund
+* Remove duplicate task schemas (`#294 <https://github.com/open-rmf/rmf_ros2/pull/294>`_)
+* Fix comparator for direct assignment ordering (`#288 <https://github.com/open-rmf/rmf_ros2/pull/288>`_)
+* Adding initiator and request time to booking (`#267 <https://github.com/open-rmf/rmf_ros2/pull/267>`_)
+* Contributors: Aaron Chong, Omar Hamza, Yadunund
 
-2.2.1 (2023-08-10)
+2.3.0 (2023-06-08)
 ------------------
-* Fix comparator for direct assignment ordering (`#291 <https://github.com/open-rmf/rmf_ros2/pull/291>`_)
-* Adding initiator and request time to booking (`#285 <https://github.com/open-rmf/rmf_ros2/pull/285>`_)
-* Contributors: Aaron Chong, Yadunund
 
 2.2.0 (2023-06-06)
 ------------------

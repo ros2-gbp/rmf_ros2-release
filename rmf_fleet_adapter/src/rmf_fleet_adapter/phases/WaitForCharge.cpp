@@ -16,7 +16,7 @@
 */
 
 #include "WaitForCharge.hpp"
-
+#include "../events/internal_ReservationNodeNegotiator.hpp"
 namespace rmf_fleet_adapter {
 namespace phases {
 
@@ -94,7 +94,46 @@ WaitForCharge::Active::Active(
     .get_observable()
     .start_with(initial_msg);
 
+  // If the charging waypoint has a mutex group, release all other mutexes
+  std::unordered_set<std::string> retain_mutexes;
+  const auto charging_waypoint = _context->dedicated_charging_wp();
+  const auto& graph = _context->navigation_graph();
+  retain_mutexes.insert(
+    graph.get_waypoint(charging_waypoint).in_mutex_group());
+  _context->retain_mutex_groups(retain_mutexes);
+
+  if (retain_mutexes.begin()->empty())
+  {
+    RCLCPP_INFO(
+      _context->node()->get_logger(),
+      "Robot [%s] is waiting to charge. All its mutex groups will be released.",
+      _context->name().c_str());
+  }
+  else
+  {
+    RCLCPP_INFO(
+      _context->node()->get_logger(),
+      "Robot [%s] is waiting to charge. It will retain only the mutex group [%s].",
+      _context->name().c_str(),
+      retain_mutexes.begin()->c_str());
+  }
+
+_reservation_client = std::move(reservation::ReservationNodeNegotiator::make(
+          _context,
+          std::vector<rmf_traffic::agv::Plan::Goal>{ charging_waypoint},
+          true,
+          [](const rmf_traffic::agv::Plan::Goal& goal)
+          {
+            // Do Nothing
+          },
+          [](const rmf_traffic::agv::Plan::Goal& goal)
+          {
+            // Do Nothing
+          }
+      ));
+
   _context->current_mode(rmf_fleet_msgs::msg::RobotMode::MODE_CHARGING);
+  _lock_charging = _context->be_charging();
 }
 
 //==============================================================================

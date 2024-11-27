@@ -46,6 +46,9 @@
 #include <rmf_api_msgs/schemas/task_state.hpp>
 #include <rmf_api_msgs/schemas/error.hpp>
 
+#include <std_msgs/msg/string.hpp>
+
+#include <random>
 #include <unordered_set>
 
 namespace rmf_task_ros2 {
@@ -90,6 +93,24 @@ nlohmann::json_schema::json_validator make_validator(nlohmann::json schema)
   return nlohmann::json_schema::json_validator(
     std::move(schema), schema_loader);
 }
+
+//==============================================================================
+std::string generate_random_hex_string(const std::size_t length = 3)
+{
+  std::stringstream ss;
+  for (std::size_t i = 0; i < length; ++i)
+  {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 255);
+    const auto random_char = dis(gen);
+    std::stringstream hexstream;
+    hexstream << std::hex << random_char;
+    auto hex = hexstream.str();
+    ss << (hex.length() < 2 ? '0' + hex : hex);
+  }
+  return ss.str();
+}
 } // anonymous namespace
 
 //==============================================================================
@@ -121,6 +142,10 @@ public:
   using ApiResponseMsg = rmf_task_msgs::msg::ApiResponse;
   rclcpp::Subscription<ApiRequestMsg>::SharedPtr api_request;
   rclcpp::Publisher<ApiResponseMsg>::SharedPtr api_response;
+
+  using TaskStateUpdateMsg = std_msgs::msg::String;
+  rclcpp::Publisher<TaskStateUpdateMsg>::SharedPtr task_state_update_pub =
+    nullptr;
 
   class ApiMemory
   {
@@ -176,6 +201,7 @@ public:
   std::size_t terminated_tasks_max_size;
   int publish_active_tasks_period;
   bool use_timestamp_for_task_id;
+  bool use_unique_hex_string_with_task_id;
 
   std::unordered_map<std::size_t, std::string> legacy_task_type_names =
   {
@@ -215,6 +241,12 @@ public:
     RCLCPP_INFO(node->get_logger(),
       " Use timestamp with task_id: %s",
       (use_timestamp_for_task_id ? "true" : "false"));
+    use_unique_hex_string_with_task_id =
+      node->declare_parameter<bool>("use_unique_hex_string_with_task_id",
+        false);
+    RCLCPP_INFO(node->get_logger(),
+      " Use unique hex string with task_id: %s",
+      (use_unique_hex_string_with_task_id ? "true" : "false"));
 
     std::optional<std::string> server_uri = std::nullopt;
     const std::string uri =
@@ -235,7 +267,7 @@ public:
     // names
     api_request = node->create_subscription<ApiRequestMsg>(
       "task_api_requests",
-      rclcpp::SystemDefaultsQoS().reliable().transient_local(),
+      rclcpp::SystemDefaultsQoS().keep_last(10).reliable().transient_local(),
       [this](const ApiRequestMsg::UniquePtr msg)
       {
         this->handle_api_request(*msg);
@@ -243,7 +275,7 @@ public:
 
     api_response = node->create_publisher<ApiResponseMsg>(
       "task_api_responses",
-      rclcpp::SystemDefaultsQoS().reliable().transient_local());
+      rclcpp::SystemDefaultsQoS().keep_last(10).reliable().transient_local());
 
     // TODO(MXG): The smallest resolution this supports is 1 second. That
     // doesn't seem great.
@@ -268,9 +300,15 @@ public:
         this->handle_dispatch_ack(*msg);
       });
 
+    task_state_update_pub = node->create_publisher<TaskStateUpdateMsg>(
+      rmf_task_ros2::TaskStateUpdateTopicName,
+      rclcpp::ServicesQoS().keep_last(10).reliable().transient_local());
+
     if (server_uri)
+    {
       broadcast_client = rmf_websocket::BroadcastClient::make(
         *server_uri, node);
+    }
 
     auctioneer = bidding::Auctioneer::make(
       node,
@@ -483,7 +521,19 @@ public:
         task_request_json["category"].get<std::string>()
         + ".dispatch-";
 
-      if (use_timestamp_for_task_id)
+      if (use_unique_hex_string_with_task_id)
+      {
+        if (use_timestamp_for_task_id)
+        {
+          RCLCPP_WARN(
+            node->get_logger(),
+            "Overwriting use_timestamp_for_task_id option with "
+            "use_unique_hex_string_with_task_id"
+          );
+        }
+        task_id += generate_random_hex_string(5);
+      }
+      else if (use_timestamp_for_task_id)
       {
         task_id += std::to_string(
           std::lround(node->get_clock()->now().seconds() * 1e3));
@@ -573,8 +623,7 @@ public:
       bid_notice.task_id, std::chrono::steady_clock::now());
     new_dispatch_state->request = request;
 
-    // Publish this initial task state message to the websocket
-    auto state = publish_task_state_ws(new_dispatch_state, "queued");
+    const auto state = create_task_state_json(new_dispatch_state, "queued");
 
     active_dispatch_states[bid_notice.task_id] = new_dispatch_state;
 
@@ -757,7 +806,18 @@ public:
       }
 
       /// Publish failed bid
-      publish_task_state_ws(dispatch_state, "failed");
+      const auto task_state =
+        create_task_state_json(dispatch_state, "failed");
+      auto task_state_update = _task_state_update_json;
+      task_state_update["data"] = task_state;
+      if (broadcast_client)
+      {
+        broadcast_client->publish(task_state_update);
+      }
+
+      TaskStateUpdateMsg update_msg;
+      update_msg.data = task_state_update.dump();
+      task_state_update_pub->publish(update_msg);
 
       auctioneer->ready_for_next_bid();
       return;
@@ -790,7 +850,7 @@ public:
   }
 
   //==============================================================================
-  nlohmann::json publish_task_state_ws(
+  nlohmann::json create_task_state_json(
     const std::shared_ptr<DispatchState> state,
     const std::string& status)
   {
@@ -830,16 +890,12 @@ public:
     dispatch_json["errors"] = state->errors;
     task_state["dispatch"] = dispatch_json;
 
-    auto task_state_update = _task_state_update_json;
-    task_state_update["data"] = task_state;
-
     /// TODO: (YL) json validator for taskstateupdate
-
-    if (broadcast_client)
-      broadcast_client->publish(task_state_update);
     return task_state;
   }
 
+
+  //==============================================================================
   void move_to_finished(const std::string& task_id)
   {
     const auto active_it = active_dispatch_states.find(task_id);

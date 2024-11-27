@@ -156,6 +156,7 @@ public:
     std::optional<rmf_traffic::Duration> remaining_time;
     bool request_replan;
     bool okay;
+    bool automatic_cancel;
     std::optional<ScheduleOverride> schedule_override;
 
     void update_location(
@@ -213,7 +214,8 @@ public:
       state(std::move(state_)),
       remaining_time(remaining_time_),
       request_replan(false),
-      okay(true)
+      okay(true),
+      automatic_cancel(true)
     {
       // Do nothing
     }
@@ -286,6 +288,32 @@ public:
     return *handle._pimpl;
   }
 
+  void set_commission(Commission commission)
+  {
+    if (const auto context = get_context())
+    {
+      context->worker().schedule(
+        [w = context->weak_from_this(), commission = std::move(commission)](
+          const auto&)
+        {
+          if (const auto context = w.lock())
+          {
+            context->set_commission(commission);
+          }
+        });
+    }
+  }
+
+  Commission commission() const
+  {
+    if (const auto context = get_context())
+    {
+      return context->copy_commission();
+    }
+
+    return Commission::decommission();
+  }
+
   std::shared_ptr<RobotContext> get_context();
 
   std::shared_ptr<const RobotContext> get_context() const;
@@ -304,6 +332,23 @@ public:
       Implementation{stubbornness});
 
     return output;
+  }
+};
+
+//==============================================================================
+class RobotUpdateHandle::LiftDestination::Implementation
+{
+public:
+  std::string lift;
+  std::string level;
+
+  static RobotUpdateHandle::LiftDestination make(
+    std::string lift, std::string level)
+  {
+    RobotUpdateHandle::LiftDestination result;
+    result._pimpl->lift = std::move(lift);
+    result._pimpl->level = std::move(level);
+    return result;
   }
 };
 

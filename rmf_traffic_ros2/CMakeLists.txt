@@ -16,6 +16,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_LIST_DIR}/cmake)
 include(GNUInstallDirs)
 
 find_package(ament_cmake REQUIRED)
+find_package(backward_ros REQUIRED)
 find_package(rmf_traffic 3 REQUIRED)
 find_package(rmf_traffic_msgs REQUIRED)
 find_package(rmf_site_map_msgs REQUIRED)
@@ -27,6 +28,8 @@ find_package(yaml-cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(LibUUID REQUIRED)
+find_package(rmf_reservation_msgs REQUIRED)
+
 
 # NOTE(MXG): libproj-dev does not currently distribute its cmake config-files
 # in Debian, so we can't use find_package and need to rely on pkg-config.
@@ -40,19 +43,24 @@ if (rmf_traffic_FOUND)
   message(STATUS "rmf_traffic_INCLUDE_DIRS: ${rmf_traffic_INCLUDE_DIRS}")
 endif()
 
+# Disable uncrustify tests by default.
+set(TEST_UNCRUSTIFY "Off")
 if(BUILD_TESTING)
   find_package(ament_cmake_catch2 QUIET)
-  find_package(ament_cmake_uncrustify REQUIRED)
-  find_file(uncrustify_config_file
-    NAMES "rmf_code_style.cfg"
-    PATHS "${rmf_utils_DIR}/../../../share/rmf_utils/")
 
-  ament_uncrustify(
-    ARGN include src examples
-    CONFIG_FILE ${uncrustify_config_file}
-    LANGUAGE C++
-    MAX_LINE_LENGTH 80
-  )
+  if(TEST_UNCRUSTIFY)
+    find_package(ament_cmake_uncrustify REQUIRED)
+    find_file(uncrustify_config_file
+      NAMES "rmf_code_style.cfg"
+      PATHS "${rmf_utils_DIR}/../../../share/rmf_utils/")
+
+    ament_uncrustify(
+      ARGN include src examples
+      CONFIG_FILE ${uncrustify_config_file}
+      LANGUAGE C++
+      MAX_LINE_LENGTH 80
+    )
+  endif()
 
   file(GLOB_RECURSE unit_test_srcs "test/unit/*.cpp")
 
@@ -176,6 +184,7 @@ target_link_libraries(rmf_traffic_ros2
     ${rmf_traffic_msgs_LIBRARIES}
     ${rmf_site_map_msgs_LIBRARIES}
     ${rmf_building_map_msgs_LIBRARIES}
+    ${rmf_reservation_msgs_LIBRARIES}
     ${rclcpp_LIBRARIES}
     yaml-cpp
     ZLIB::ZLIB
@@ -191,6 +200,7 @@ target_include_directories(rmf_traffic_ros2
     ${rmf_traffic_msgs_INCLUDE_DIRS}
     ${rmf_site_map_msgs_INCLUDE_DIRS}
     ${rmf_building_map_msgs_INCLUDE_DIRS}
+    ${rmf_reservation_msgs_INCLUDE_DIRS}
     ${rclcpp_INCLUDE_DIRS}
 )
 

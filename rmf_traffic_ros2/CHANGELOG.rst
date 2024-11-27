@@ -2,29 +2,46 @@
 Changelog for package rmf_traffic_ros2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.2.7 (2024-11-15)
+2.9.0 (2024-11-27)
+------------------
+* Adds a simple parking spot management system.  (`#325 <https://github.com/open-rmf/rmf_ros2/issues/325>`_)
+* Contributors: Arjo Chakravarty
+
+2.8.0 (2024-06-12)
 ------------------
 
-2.2.6 (2024-07-12)
+2.7.1 (2024-06-11)
 ------------------
 
-2.2.5 (2023-12-22)
+2.7.0 (2024-06-01)
 ------------------
-
-2.2.4 (2023-12-15)
-------------------
-
-2.2.3 (2023-09-20)
-------------------
-* EasyFullControl API (`#302 <https://github.com/open-rmf/rmf_ros2/pull/302>`_)
-* Contributors: Luca Della Vedova, Michael X. Grey, Xiyu, Yadunund
-
-2.2.2 (2023-09-11)
-------------------
-* Improve linking time (`#300 <https://github.com/open-rmf/rmf_ros2/pull/300>`_)
+* Fix race condition for ingesting/dispensing and disable uncrustify tests by default (`#362 <https://github.com/open-rmf/rmf_ros2/pull/362>`_)
+* Fix serialization of exit events (`#364 <https://github.com/open-rmf/rmf_ros2/pull/364>`_)
 * Contributors: Grey, Luca Della Vedova, Yadunund
 
-2.2.1 (2023-08-10)
+2.6.0 (2024-03-13)
+------------------
+* Add Backward-ROS for improved logging in event of segfaults (`#327 <https://github.com/open-rmf/rmf_ros2/pull/327>`_)
+* Explicitly specify all qos depth (`#323 <https://github.com/open-rmf/rmf_ros2/pull/323>`_)
+* Contributors: Arjo Chakravarty, Teo Koon Peng, Yadunund
+
+2.5.0 (2023-12-22)
+------------------
+
+2.4.0 (2023-12-15)
+------------------
+
+2.3.2 (2023-08-28)
+------------------
+* Improve linking time (`#297 <https://github.com/open-rmf/rmf_ros2/pull/297>`_)
+* EasyFullControl API (`#235 <https://github.com/open-rmf/rmf_ros2/pull/235>`_)
+* Remove a few warnings related to RCLCPP logger (`#296 <https://github.com/open-rmf/rmf_ros2/pull/296>`_)
+* Contributors: Arjo Chakravarty, Grey, Luca Della Vedova, Xiyu, Yadunund
+
+2.3.1 (2023-08-10)
+------------------
+
+2.3.0 (2023-06-08)
 ------------------
 
 2.2.0 (2023-06-06)

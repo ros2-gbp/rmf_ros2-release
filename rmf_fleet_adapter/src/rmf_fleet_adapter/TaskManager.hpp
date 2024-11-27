@@ -32,6 +32,8 @@
 #include <rmf_fleet_msgs/msg/robot_mode.hpp>
 #include <rmf_task_msgs/msg/task_summary.hpp>
 
+#include <std_msgs/msg/string.hpp>
+
 #include <nlohmann/json.hpp>
 #include <nlohmann/json-schema.hpp>
 
@@ -39,6 +41,18 @@
 #include <set>
 
 namespace rmf_fleet_adapter {
+
+struct PendingTimeInfo
+{
+  int64_t unix_millis_finish_time;
+  int64_t original_estimate_millis;
+};
+
+struct PendingInfo
+{
+  rmf_task::Task::Description::Info info;
+  std::optional<PendingTimeInfo> time;
+};
 
 //==============================================================================
 /// This task manager is a first attempt at managing multiple tasks per fleet.
@@ -113,12 +127,20 @@ public:
 
   void set_idle_task(rmf_task::ConstRequestFactoryPtr task);
 
+  void use_default_idle_task();
+
   /// Set the queue for this task manager with assignments generated from the
   /// task planner
   void set_queue(const std::vector<Assignment>& assignments);
 
   /// Get the non-charging requests among pending tasks
-  const std::vector<rmf_task::ConstRequestPtr> requests() const;
+  std::vector<rmf_task::ConstRequestPtr> dispatched_requests() const;
+
+  /// Send all dispatched requests that are still in the queue back to the fleet
+  /// handle for reassignment.
+  void reassign_dispatched_requests(
+    std::function<void()> on_success,
+    std::function<void(std::vector<std::string>)> on_failure);
 
   std::optional<std::string> current_task_id() const;
 
@@ -137,6 +159,12 @@ public:
   /// Callback for the retreat timer. Appends a charging task to the task queue
   /// when robot is idle and battery level drops below a retreat threshold.
   void retreat_to_charger();
+
+  /// Start the retreat timer that periodically checks whether the robot
+  /// should retreat to charger if its battery state of charge is close to
+  /// the recharge threshold.
+  void configure_retreat_to_charger(
+    std::optional<rmf_traffic::Duration> duration);
 
   /// Get the list of task ids for tasks that have started execution.
   /// The list will contain upto 100 latest task ids only.
@@ -209,6 +237,22 @@ public:
     const std::string& task_id,
     std::vector<std::string> labels);
 
+  /// Cancel a task for this robot while marking it completed. Returns true if
+  /// the task was being managed by this task manager, or false if it was not.
+  bool quiet_cancel_task(
+    const std::string& task_id,
+    std::vector<std::string> labels);
+
+  /// This should only be triggered by RobotContext::set_commission(~), and only
+  /// in scenarios where the idle behavior commission has been toggled off.
+  void _cancel_idle_behavior(std::vector<std::string> labels);
+
+  /// Begin the next task for this robot if there is a new task ready to perform
+  /// and the robot is not already performing a task or caught in an emergency or
+  /// interruption. If no task is being performed and no new task is ready, the
+  /// idle behavior will be triggered.
+  void _begin_next_task();
+
 private:
 
   TaskManager(
@@ -260,6 +304,10 @@ private:
 
     void rewind(uint64_t phase_id);
 
+    void quiet_cancel(
+      std::vector<std::string> labels,
+      rmf_traffic::Time time);
+
     std::string skip(
       uint64_t phase_id,
       std::vector<std::string> labels,
@@ -301,6 +349,7 @@ private:
     std::unordered_map<uint64_t, SkipInfo> _skip_info_map;
 
     uint64_t _next_token = 0;
+    bool _quiet_cancel = false;
   };
 
   friend class ActiveTask;
@@ -320,6 +369,11 @@ private:
   uint16_t _count_emergency_pullover = 0;
   // Queue for dispatched tasks
   std::vector<Assignment> _queue;
+  std::unordered_map<
+    rmf_task::ConstRequestPtr,
+    PendingInfo
+  > _pending_task_info;
+
   // An ID to keep track of the FIFO order of direct tasks
   std::size_t _next_sequence_number;
   // Queue for directly assigned tasks
@@ -338,12 +392,19 @@ private:
   // TODO: Eliminate the need for a mutex by redesigning the use of the task
   // manager so that modifications of shared data only happen on designated
   // rxcpp worker
-  mutable std::mutex _mutex;
+  mutable std::recursive_mutex _mutex;
   rclcpp::TimerBase::SharedPtr _task_timer;
   rclcpp::TimerBase::SharedPtr _retreat_timer;
   rclcpp::TimerBase::SharedPtr _update_timer;
   bool _task_state_update_available = true;
   std::chrono::steady_clock::time_point _last_update_time;
+
+  using TaskStateUpdateMsg = std_msgs::msg::String;
+  rclcpp::Publisher<TaskStateUpdateMsg>::SharedPtr _task_state_update_pub =
+    nullptr;
+
+  using TaskLogUpdateMsg = std_msgs::msg::String;
+  rclcpp::Publisher<TaskLogUpdateMsg>::SharedPtr _task_log_update_pub = nullptr;
 
   // Container to keep track of tasks that have been started by this TaskManager
   // Use the _register_executed_task() to populate this container.
@@ -379,8 +440,9 @@ private:
   // Map task_id to task_log.json for all tasks managed by this TaskManager
   std::unordered_map<std::string, nlohmann::json> _task_logs = {};
 
-  /// Callback for task timer which begins next task if its deployment time has passed
-  void _begin_next_task();
+  /// Begin performing an emergency pullover. This should only be called when an
+  /// emergency is active.
+  void _begin_pullover();
 
   // Interrupts that were issued when there was no active task. They will be
   // applied when a task becomes active.
@@ -432,6 +494,12 @@ private:
   void _publish_canceled_pending_task(
     const Assignment& assignment,
     std::vector<std::string> labels);
+
+  /// Take all dispatched assignments out of the queue, leaving the queue empty.
+  std::vector<Assignment> _drain_dispatched_assignments();
+
+  /// Take all direct assignments out of the queue, leaving the queue empty.
+  std::vector<Assignment> _drain_direct_assignments();
 
   /// Cancel a task that is in the dispatch queue. Returns false if the task
   /// was not present.
@@ -495,7 +563,7 @@ private:
 
   /// Validate and publish a json. This can be used for task
   /// state and log updates
-  void _validate_and_publish_websocket(
+  void _validate_and_publish_json(
     const nlohmann::json& msg,
     const nlohmann::json_schema::json_validator& validator) const;
 
@@ -532,6 +600,10 @@ private:
     const std::string& request_id);
 
   void _handle_direct_request(
+    const nlohmann::json& request_json,
+    const std::string& request_id);
+
+  void _handle_commission_request(
     const nlohmann::json& request_json,
     const std::string& request_id);
 

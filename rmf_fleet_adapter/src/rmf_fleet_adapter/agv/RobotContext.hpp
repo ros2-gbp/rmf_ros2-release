@@ -23,6 +23,9 @@
 #include <rmf_fleet_adapter/agv/FleetUpdateHandle.hpp>
 #include <rmf_fleet_adapter/agv/Transformation.hpp>
 #include <rmf_fleet_adapter/agv/EasyFullControl.hpp>
+#include <rmf_fleet_adapter/StandardNames.hpp>
+
+#include <rmf_fleet_msgs/msg/mutex_group_manual_release.hpp>
 
 #include <rmf_traffic/schedule/Negotiator.hpp>
 #include <rmf_traffic/schedule/Participant.hpp>
@@ -43,6 +46,7 @@
 
 #include "Node.hpp"
 #include "../Reporting.hpp"
+#include "ReservationManager.hpp"
 
 #include <unordered_set>
 
@@ -53,6 +57,7 @@ class TaskManager;
 
 namespace agv {
 
+class FleetUpdateHandle;
 class RobotContext;
 using TransformDictionary = std::unordered_map<std::string, Transformation>;
 using SharedPlanner = std::shared_ptr<
@@ -240,10 +245,16 @@ inline std::string print_starts(
 }
 
 //==============================================================================
+std::unordered_map<std::size_t, VertexStack> compute_stacked_vertices(
+  const rmf_traffic::agv::Graph& graph,
+  double max_merge_waypoint_distance);
+
+//==============================================================================
 struct NavParams
 {
   bool skip_rotation_commands;
   std::shared_ptr<TransformDictionary> transforms_to_robot_coords;
+  std::unordered_set<std::size_t> strict_lanes;
   double max_merge_waypoint_distance = 1e-3;
   double max_merge_lane_distance = 0.3;
   double min_lane_length = 1e-8;
@@ -291,6 +302,12 @@ struct NavParams
     RobotContext& context);
 
   rmf_traffic::agv::Plan::StartSet compute_plan_starts(
+    const RobotContext& context,
+    const std::string& map_name,
+    const Eigen::Vector3d position,
+    const rmf_traffic::Time start_time) const;
+
+  rmf_traffic::agv::Plan::StartSet unfiltered_compute_plan_starts(
     const rmf_traffic::agv::Graph& graph,
     const std::string& map_name,
     const Eigen::Vector3d position,
@@ -308,13 +325,13 @@ struct NavParams
         min_lane_length);
 
       if (!starts.empty())
-        return process_locations(graph, starts);
+        return starts;
     }
 
     return {};
   }
 
-  std::unordered_map<std::size_t, VertexStack> stacked_vertices;
+  std::unordered_map<std::size_t, VertexStack> stacked_vertices = {};
 
   void find_stacked_vertices(const rmf_traffic::agv::Graph& graph);
 
@@ -323,8 +340,8 @@ struct NavParams
     std::optional<std::size_t> v) const;
 
   rmf_traffic::agv::Plan::StartSet process_locations(
-    const rmf_traffic::agv::Graph& graph,
-    rmf_traffic::agv::Plan::StartSet locations) const;
+    rmf_traffic::agv::Plan::StartSet locations,
+    const RobotContext& context) const;
 
   rmf_traffic::agv::Plan::StartSet _descend_stacks(
     const rmf_traffic::agv::Graph& graph,
@@ -333,7 +350,12 @@ struct NavParams
   // If one of the locations is associated with a lift vertex, filter it out if
   // the actual of the robot is outside the dimensions of the lift.
   rmf_traffic::agv::Plan::StartSet _lift_boundary_filter(
-    const rmf_traffic::agv::Graph& graph,
+    rmf_traffic::agv::Plan::StartSet locations,
+    const RobotContext& context) const;
+
+  // If one of the starts is mid-lane on a strict lane, filter it out of the
+  // start set.
+  rmf_traffic::agv::Plan::StartSet _strict_lane_filter(
     rmf_traffic::agv::Plan::StartSet locations) const;
 
   bool in_same_stack(std::size_t wp0, std::size_t wp1) const;
@@ -383,19 +405,14 @@ struct MutexGroupData
 };
 
 //==============================================================================
-struct MutexGroupSwitch
-{
-  std::string from;
-  std::string to;
-  std::function<bool()> accept;
-};
-
-//==============================================================================
 class RobotContext
   : public std::enable_shared_from_this<RobotContext>,
   public rmf_traffic::schedule::Negotiator
 {
 public:
+
+
+  uint64_t last_reservation_request_id();
 
   /// Get a handle to the command interface of the robot. This may return a
   /// nullptr if the robot has disconnected and/or its command API is no longer
@@ -486,6 +503,14 @@ public:
   /// Set the navigation params for this robot. This is used by EasyFullControl
   /// robots.
   void set_nav_params(std::shared_ptr<NavParams> value);
+
+  /// Check whether this robot is using a robot-specific or fleet-wide finishing
+  /// request.
+  bool robot_finishing_request() const;
+
+  /// Toggle the robot_finishing_request flag to indicate whether this robot is
+  /// using a robot-specific or fleet-wide finishing request.
+  void robot_finishing_request(bool robot_specific);
 
   class NegotiatorLicense;
 
@@ -587,6 +612,13 @@ public:
   /// (false)?
   bool waiting_for_charger() const;
 
+  /// This function will indicate that the robot is currently charging for as
+  /// long as the return value is held onto.
+  std::shared_ptr<void> be_charging();
+
+  /// Check if the robot is currently doing a battery charging task.
+  bool is_charging() const;
+
   // Get a reference to the battery soc observer of this robot.
   const rxcpp::observable<double>& observe_battery_soc() const;
 
@@ -632,13 +664,18 @@ public:
   /// Get the task manager for this robot, if it exists.
   std::shared_ptr<TaskManager> task_manager();
 
-  /// Return true if this robot is currently commissioned (available to accept
-  /// new tasks).
-  bool is_commissioned() const;
+  /// Set the commission for this robot
+  void set_commission(RobotUpdateHandle::Commission value);
 
-  void decommission();
+  /// Get a reference to the robot's commission.
+  const RobotUpdateHandle::Commission& commission() const;
 
-  void recommission();
+  /// Lock the commission_mutex and return a copy of the robot's current
+  /// commission.
+  RobotUpdateHandle::Commission copy_commission() const;
+
+  /// Reassign the tasks that have been dispatched for this robot
+  void reassign_dispatched_tasks();
 
   Reporting& reporting();
 
@@ -670,11 +707,32 @@ public:
   /// Indicate that the lift is no longer needed
   void release_lift();
 
+  /// Get the final lift destination that the overall session intends to end at.
+  /// This is used to give robots advanced notice of what floor they will be
+  /// going to, in case they need this information in order to enter the lift
+  /// correctly.
+  std::optional<RobotUpdateHandle::LiftDestination>
+  final_lift_destination() const;
+
+  /// Change what the final lift destination is currently set to. Typically this
+  /// should only be called by RequestLift.
+  void set_final_lift_destination(
+    RobotUpdateHandle::LiftDestination destination);
+
+  /// Clear the information about the final lift destination. Typically this
+  /// should only be called by release_lift().
+  void clear_final_lift_destination();
+
   /// Check if a door is being held
   const std::optional<std::string>& holding_door() const;
 
-  /// What mutex group is currently being locked.
+  /// What mutex groups are currently locked by this robot.
   const std::unordered_map<std::string, TimeMsg>& locked_mutex_groups() const;
+
+  /// What mutex groups are currently being requested (but have not yet been
+  /// locked) by this robot.
+  const std::unordered_map<std::string, TimeMsg>&
+  requesting_mutex_groups() const;
 
   /// Set the mutex group that this robot needs to lock.
   const rxcpp::observable<std::string>& request_mutex_groups(
@@ -694,6 +752,24 @@ public:
     rmf_traffic::Duration wait,
     Eigen::Vector3d position,
     const std::string& map);
+
+  /// If the robot is inside a lift, this will indicate what level the lift is
+  /// currently on. This will be used for filtering out start points for the
+  /// planner.
+  std::shared_ptr<const std::string> current_boarded_lift_level() const;
+
+  /// This should only be set in RequestLift.cpp when the robot is doing a lift
+  /// request from the inside.
+  void _set_current_boarded_lift_level(
+    std::shared_ptr<const std::string> lift_level);
+
+  /// The last reported location of the robot, as given by the EasyFullControl
+  /// API
+  std::shared_ptr<const Location> reported_location() const;
+
+  /// Set the shared reference for the reported location. This should only be
+  /// called once while initializing a new EasyFullControl robot.
+  void _set_reported_location(std::shared_ptr<const Location> value);
 
   /// Set the task manager for this robot. This should only be called in the
   /// TaskManager::make function.
@@ -722,6 +798,38 @@ public:
   void _set_lift_arrived(
     const std::string& lift_name,
     const std::string& destination_name);
+
+  /// Set an allocated destination.
+  void _set_allocated_destination(
+    const rmf_reservation_msgs::msg::ReservationAllocation&);
+
+  /// Cancel allocated destination
+  void _cancel_allocated_destination();
+
+  /// Get last reserved location. Empty string if not reserved.
+  std::string _get_reserved_location();
+
+  /// Set if the parking spot manager is used or not
+  void _set_parking_spot_manager(const bool enabled);
+
+  /// Find all available spots. Order based on current location.
+  /// \param[in] same_floor - if the parking spots should be on the same floor.
+  std::vector<rmf_traffic::agv::Planner::Goal>
+  _find_and_sort_parking_spots(const bool same_floor)
+  const;
+
+  /// Find all available parking sports. Order based on goal.
+  /// \param[in] same_floor - if the parking spots should be on the same floor.
+  std::vector<rmf_traffic::agv::Planner::Goal>
+  _find_and_sort_parking_spots(
+    const rmf_traffic::agv::Plan::Goal& dest, const bool same_floor)
+  const;
+
+  /// Set if the parking spot manager is used or not
+  bool _parking_spot_manager_enabled();
+
+  /// Does the parking spot have a ticket?
+  bool _has_ticket() const;
 
   template<typename... Args>
   static std::shared_ptr<RobotContext> make(Args&&... args)
@@ -772,6 +880,22 @@ public:
 
         self->_publish_mutex_group_requests();
       });
+
+    context->_mutex_group_manual_release_sub =
+      context->_node->create_subscription<
+      rmf_fleet_msgs::msg::MutexGroupManualRelease>(
+      MutexGroupManualReleaseTopicName,
+      rclcpp::SystemDefaultsQoS()
+      .reliable()
+      .keep_last(10),
+      [w = context->weak_from_this()](
+        rmf_fleet_msgs::msg::MutexGroupManualRelease::SharedPtr msg)
+      {
+        if (const auto self = w.lock())
+          self->_handle_mutex_group_manual_release(*msg);
+      });
+
+    context->_reservation_mgr._context = context;
 
     return context;
   }
@@ -831,7 +955,8 @@ private:
   std::size_t _charging_wp;
   /// When the robot reaches its _charging_wp, is there to wait for a charger
   /// (true) or to actually charge (false)?
-  bool _waiting_for_charger;
+  bool _waiting_for_charger = false;
+  std::shared_ptr<void> _lock_charging;
   rxcpp::subjects::subject<double> _battery_soc_publisher;
   rxcpp::observable<double> _battery_soc_obs;
   rmf_task::State _current_task_end_state;
@@ -840,12 +965,18 @@ private:
     std::make_unique<std::mutex>();
   std::shared_ptr<const rmf_task::TaskPlanner> _task_planner;
   std::weak_ptr<TaskManager> _task_manager;
+  bool _robot_finishing_request = false;
 
   RobotUpdateHandle::Unstable::Watchdog _lift_watchdog;
   rmf_traffic::Duration _lift_rewait_duration = std::chrono::seconds(0);
-  bool _commissioned = true;
+  std::unique_ptr<std::mutex> _commission_mutex =
+    std::make_unique<std::mutex>();
+  RobotUpdateHandle::Commission _commission;
   bool _emergency = false;
   EasyFullControl::LocalizationRequest _localize;
+
+  std::shared_ptr<const Location> _reported_location;
+  std::weak_ptr<const std::string> _current_boarded_lift_level;
 
   // Mode value for RobotMode message
   uint32_t _current_mode;
@@ -876,13 +1007,25 @@ private:
     std::unordered_map<std::string, TimeMsg>& _groups);
   void _release_mutex_group(const MutexGroupData& data) const;
   void _publish_mutex_group_requests();
+  void _handle_mutex_group_manual_release(
+    const rmf_fleet_msgs::msg::MutexGroupManualRelease& msg);
   std::unordered_map<std::string, TimeMsg> _requesting_mutex_groups;
   std::unordered_map<std::string, TimeMsg> _locked_mutex_groups;
   rxcpp::subjects::subject<std::string> _mutex_group_lock_subject;
   rxcpp::observable<std::string> _mutex_group_lock_obs;
   rclcpp::TimerBase::SharedPtr _mutex_group_heartbeat;
   rmf_rxcpp::subscription_guard _mutex_group_sanity_check;
+  rclcpp::Subscription<rmf_fleet_msgs::msg::MutexGroupManualRelease>::SharedPtr
+    _mutex_group_manual_release_sub;
   std::chrono::steady_clock::time_point _last_active_task_time;
+
+  uint64_t _last_reservation_request_id;
+  ReservationManager _reservation_mgr;
+  bool _use_parking_spot_reservations;
+
+  std::optional<RobotUpdateHandle::LiftDestination> _final_lift_destination;
+  std::unique_ptr<std::mutex> _final_lift_destination_mutex =
+    std::make_unique<std::mutex>();
 };
 
 using RobotContextPtr = std::shared_ptr<RobotContext>;

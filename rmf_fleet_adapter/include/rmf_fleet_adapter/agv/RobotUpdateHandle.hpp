@@ -25,6 +25,8 @@
 
 #include <rmf_traffic/schedule/Participant.hpp>
 
+#include <rmf_task/RequestFactory.hpp>
+
 #include <Eigen/Geometry>
 #include <nlohmann/json.hpp>
 
@@ -97,10 +99,25 @@ public:
   /// for it.
   void update_position(rmf_traffic::agv::Plan::StartSet position);
 
+  /// Set whether this robot uses the parking reservation system. By default this
+  /// is false in order to keep the system behavior backwards compatible, but it
+  /// is recommended that you turn this on.
+  ///
+  /// If you are using the EasyFullControl API then you can set this in your
+  /// fleet configuration.
+  RobotUpdateHandle& use_parking_reservation_system(bool use);
+
   /// Set the waypoint where the charger for this robot is located.
   /// If not specified, the nearest waypoint in the graph with the is_charger()
   /// property will be assumed as the charger for this robot.
   RobotUpdateHandle& set_charger_waypoint(const std::size_t charger_wp);
+
+  /// Set a finishing request for this robot.
+  RobotUpdateHandle& set_finishing_request(rmf_task::ConstRequestFactoryPtr finishing_request);
+
+  /// Set a finishing request for this robot to use the fleet-wide finishing
+  /// request.
+  RobotUpdateHandle& use_default_finishing_request();
 
   /// Update the current battery level of the robot by specifying its state of
   /// charge as a fraction of its total charge capacity, i.e. a value from 0.0
@@ -229,6 +246,19 @@ public:
 
     /// Returns false if the Action has been killed or cancelled
     bool okay() const;
+
+    /// Set whether automatic cancellation is turned on for this action.
+    ///
+    /// When automatic cancellation is on, the task system will believe that the
+    /// action is successfully cancelled immediately upon receiving a cancel
+    /// signal. By default, automatic cancellation is on (true).
+    ///
+    /// If your action needs to perform some kind of wind-down or cleanup after
+    /// being cancelled, then you should set this to false. At that point you
+    /// must ensure that your action implementation is watching okay() to know
+    /// if it has been cancelled, and you must trigger finished() when your
+    /// wind-down or cleanup is finished.
+    void set_automatic_cancel(bool on);
 
     /// Activity identifier for this action. Used by the EasyFullControl API.
     ConstActivityIdentifierPtr identifier() const;
@@ -411,6 +441,84 @@ public:
   /// If the robot is holding onto a session with a lift, release that session.
   void release_lift();
 
+  /// A description of whether the robot should accept dispatched and/or direct
+  /// tasks.
+  class Commission
+  {
+  public:
+    /// Construct a Commission description with all default values.
+    /// - accept_dispatched_tasks: true
+    /// - accept_direct_tasks: true
+    /// - is_performing_idle_behavior: true
+    Commission();
+
+    /// Construct a Commission description that accepts no tasks at all.
+    /// - accept_dispatch_tasks: false
+    /// - accept_direct_tasks: false
+    /// - is_performing_idle_behavior: false
+    static Commission decommission();
+
+    /// Set whether this commission should accept dispatched tasks.
+    Commission& accept_dispatched_tasks(bool decision = true);
+
+    /// Check whether this commission is accepting dispatched tasks.
+    bool is_accepting_dispatched_tasks() const;
+
+    /// Set whether this commission should accept direct tasks
+    Commission& accept_direct_tasks(bool decision = true);
+
+    /// Check whether this commission is accepting direct tasks.
+    bool is_accepting_direct_tasks() const;
+
+    /// Set whether this commission should perform idle behaviors (formerly
+    /// referred to as "finishing tasks").
+    Commission& perform_idle_behavior(bool decision = true);
+
+    /// Check whether this commission is performing idle behaviors (formerly
+    /// referred to as "finishing tasks").
+    bool is_performing_idle_behavior() const;
+
+    class Implementation;
+  private:
+    rmf_utils::impl_ptr<Implementation> _pimpl;
+  };
+
+  /// Set the current commission for the robot.
+  void set_commission(Commission commission);
+
+  /// Get the current commission for the robot. If the robot has been dropped
+  /// from the fleet, this will return Commission::decommission().
+  Commission commission() const;
+
+  /// Tell the fleet adapter to reassign all the tasks that have been dispatched
+  /// to this robot. To prevent the tasks from being reassigned back to this
+  /// robot use .set_commission(Commission::decommission())
+  ///
+  /// In the current implementation, tasks will only be reassigned to robots
+  /// in the same fleet that the task was originally assigned to. This behavior
+  /// could change in the future.
+  void reassign_dispatched_tasks();
+
+  /// Information about where the lift will be asked to go for a robot.
+  class LiftDestination
+  {
+  public:
+    /// Name of the lift that is being used.
+    const std::string& lift() const;
+
+    /// Name of the level that the lift will be going to.
+    const std::string& level() const;
+
+    class Implementation;
+  private:
+    LiftDestination();
+    rmf_utils::impl_ptr<Implementation> _pimpl;
+  };
+
+  /// If this robot has begun a lift session, this will contain information
+  /// about where the robot will ask to go, and which lift it intends to use.
+  std::optional<LiftDestination> lift_destination() const;
+
   class Implementation;
 
   /// This API is experimental and will not be supported in the future. Users
@@ -420,15 +528,18 @@ public:
   public:
     /// True if this robot is allowed to accept new tasks. False if the robot
     /// will not accept any new tasks.
+    [[deprecated("Use commission instead")]]
     bool is_commissioned() const;
 
     /// Stop this robot from accepting any new tasks. It will continue to
     /// perform tasks that are already in its queue. To reassign those tasks,
     /// you will need to use the task request API to cancel the tasks and
     /// re-request them.
+    [[deprecated("Use set_commission instead")]]
     void decommission();
 
     /// Allow this robot to resume accepting new tasks.
+    [[deprecated("Use set_commission instead")]]
     void recommission();
 
     /// Get the schedule participant of this robot
@@ -480,6 +591,25 @@ public:
 
     /// Turn on/off a debug dump of how position updates are being processed
     void debug_positions(bool on);
+
+    /// Cancel a task but keep the task state displayed as completed, if it has
+    /// been assigned to this robot
+    ///
+    /// \param[in] task_id
+    ///   The ID of the task to be canceled
+    ///
+    /// \param[in] labels
+    ///   Labels that will be assigned to this cancellation. It is recommended to
+    ///   include information about why the cancellation is happening.
+    ///
+    /// \param[in] on_cancellation
+    ///   Callback that will be triggered after the cancellation is issued.
+    ///   task_was_found will be true if the task was successfully found and
+    ///   issued the cancellation, false otherwise.
+    void quiet_cancel_task(
+      std::string task_id,
+      std::vector<std::string> labels,
+      std::function<void(bool task_was_found)> on_cancellation);
 
   private:
     friend Implementation;

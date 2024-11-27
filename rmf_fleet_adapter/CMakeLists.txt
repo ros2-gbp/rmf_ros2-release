@@ -11,6 +11,7 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(backward_ros REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(Threads REQUIRED)
@@ -37,6 +38,7 @@ set(dep_pkgs
   rmf_battery
   rmf_task
   rmf_task_sequence
+  rmf_reservation_msgs
   std_msgs
   rmf_api_msgs
   rmf_websocket
@@ -48,7 +50,9 @@ foreach(pkg ${dep_pkgs})
   find_package(${pkg} REQUIRED)
 endforeach()
 
-if(BUILD_TESTING)
+# Disable uncrustify tests by default.
+set(TEST_UNCRUSTIFY "Off")
+if(BUILD_TESTING AND TEST_UNCRUSTIFY)
   find_package(ament_cmake_uncrustify REQUIRED)
   find_file(uncrustify_config_file
     NAMES "rmf_code_style.cfg"
@@ -85,6 +89,7 @@ ament_target_dependencies(rmf_fleet_adapter
     rmf_dispenser_msgs
     rmf_ingestor_msgs
     rmf_building_map_msgs
+    rmf_reservation_msgs
     rclcpp
 )
 
@@ -112,6 +117,7 @@ target_include_directories(rmf_fleet_adapter
     ${rmf_dispenser_msgs_INCLUDE_DIRS}
     ${rmf_ingestor_msgs_INCLUDE_DIRS}
     ${rmf_api_msgs_INCLUDE_DIRS}
+    ${rmf_reservation_msgs_INCLUDE_DIRS}
     ${rmf_websocket_INCLUDE_DIR}
     ${rmf_traffic_ros2_INCLUDE_DIRS}
     ${rmf_building_map_msgs_INCLUDE_DIRS}
@@ -149,6 +155,7 @@ if (BUILD_TESTING)
       std_msgs
       rmf_building_map_msgs
       rmf_websocket
+      rmf_reservation_msgs
   )
   target_include_directories(test_rmf_fleet_adapter
     PRIVATE
