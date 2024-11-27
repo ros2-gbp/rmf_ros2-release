@@ -32,6 +32,8 @@
 #include <rmf_fleet_msgs/msg/robot_mode.hpp>
 #include <rmf_task_msgs/msg/task_summary.hpp>
 
+#include <std_msgs/msg/string.hpp>
+
 #include <nlohmann/json.hpp>
 #include <nlohmann/json-schema.hpp>
 
@@ -124,6 +126,8 @@ public:
   void enable_responsive_wait(bool value);
 
   void set_idle_task(rmf_task::ConstRequestFactoryPtr task);
+
+  void use_default_idle_task();
 
   /// Set the queue for this task manager with assignments generated from the
   /// task planner
@@ -233,6 +237,12 @@ public:
     const std::string& task_id,
     std::vector<std::string> labels);
 
+  /// Cancel a task for this robot while marking it completed. Returns true if
+  /// the task was being managed by this task manager, or false if it was not.
+  bool quiet_cancel_task(
+    const std::string& task_id,
+    std::vector<std::string> labels);
+
   /// This should only be triggered by RobotContext::set_commission(~), and only
   /// in scenarios where the idle behavior commission has been toggled off.
   void _cancel_idle_behavior(std::vector<std::string> labels);
@@ -294,6 +304,10 @@ private:
 
     void rewind(uint64_t phase_id);
 
+    void quiet_cancel(
+      std::vector<std::string> labels,
+      rmf_traffic::Time time);
+
     std::string skip(
       uint64_t phase_id,
       std::vector<std::string> labels,
@@ -335,6 +349,7 @@ private:
     std::unordered_map<uint64_t, SkipInfo> _skip_info_map;
 
     uint64_t _next_token = 0;
+    bool _quiet_cancel = false;
   };
 
   friend class ActiveTask;
@@ -383,6 +398,13 @@ private:
   rclcpp::TimerBase::SharedPtr _update_timer;
   bool _task_state_update_available = true;
   std::chrono::steady_clock::time_point _last_update_time;
+
+  using TaskStateUpdateMsg = std_msgs::msg::String;
+  rclcpp::Publisher<TaskStateUpdateMsg>::SharedPtr _task_state_update_pub =
+    nullptr;
+
+  using TaskLogUpdateMsg = std_msgs::msg::String;
+  rclcpp::Publisher<TaskLogUpdateMsg>::SharedPtr _task_log_update_pub = nullptr;
 
   // Container to keep track of tasks that have been started by this TaskManager
   // Use the _register_executed_task() to populate this container.
@@ -541,7 +563,7 @@ private:
 
   /// Validate and publish a json. This can be used for task
   /// state and log updates
-  void _validate_and_publish_websocket(
+  void _validate_and_publish_json(
     const nlohmann::json& msg,
     const nlohmann::json_schema::json_validator& validator) const;
 
