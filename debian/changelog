@@ -1,0 +1,46 @@
+ros-rolling-rmf-charging-schedule (2.9.0-1noble) noble; urgency=high
+
+  * Fixes warning given by colcon_ros on Jazzy (#377 <https://github.com/open-rmf/rmf_ros2/issues/377>)
+  * Add icecream as a rosdep dependency (#358 <https://github.com/open-rmf/rmf_ros2/issues/358>)
+  * Contributors: Arjo Chakravarty
+
+ -- Grey <mxgrey@intrinsic.ai>  Tue, 26 Nov 2024 16:00:00 -0000
+
+ros-rolling-rmf-charging-schedule (2.8.0-1noble) noble; urgency=high
+
+
+
+ -- Grey <mxgrey@intrinsic.ai>  Tue, 11 Jun 2024 16:00:00 -0000
+
+ros-rolling-rmf-charging-schedule (2.7.1-1noble) noble; urgency=high
+
+  * Fix charging status (#347 <https://github.com/open-rmf/rmf_ros2/pull/347>)
+  * Contributors: Grey
+
+ -- Grey <mxgrey@intrinsic.ai>  Mon, 10 Jun 2024 16:00:00 -0000
+
+ros-rolling-rmf-charging-schedule (2.7.0-1noble) noble; urgency=high
+
+
+
+ -- Grey <mxgrey@intrinsic.ai>  Fri, 31 May 2024 16:00:00 -0000
+
+ros-rolling-rmf-charging-schedule (2.6.0-1noble) noble; urgency=high
+
+
+
+ -- Grey <mxgrey@intrinsic.ai>  Tue, 12 Mar 2024 16:00:00 -0000
+
+ros-rolling-rmf-charging-schedule (2.5.0-1noble) noble; urgency=high
+
+
+
+ -- Grey <mxgrey@intrinsic.ai>  Thu, 21 Dec 2023 16:00:00 -0000
+
+ros-rolling-rmf-charging-schedule (2.4.0-1noble) noble; urgency=high
+
+  * First release
+
+ -- Grey <mxgrey@intrinsic.ai>  Thu, 14 Dec 2023 16:00:00 -0000
+
+
