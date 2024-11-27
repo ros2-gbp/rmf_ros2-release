@@ -2,6 +2,14 @@
 Changelog for package rmf_traffic_ros2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.9.0 (2024-11-27)
+------------------
+* Adds a simple parking spot management system.  (`#325 <https://github.com/open-rmf/rmf_ros2/issues/325>`_)
+* Contributors: Arjo Chakravarty
+
+2.8.0 (2024-06-12)
+------------------
+
 2.7.1 (2024-06-11)
 ------------------
 
