@@ -316,6 +316,15 @@ public:
   /// Set the minimum lane length.
   void set_min_lane_length(std::optional<double> distance);
 
+  /// Get the idle behavior.
+  ///
+  /// If std::nullopt is used, then the fleet-wide default finishing request
+  /// will be used.
+  std::optional<rmf_task::ConstRequestFactoryPtr> finishing_request() const;
+
+  /// Set the finishing request.
+  void set_finishing_request(std::optional<rmf_task::ConstRequestFactoryPtr> request);
+
   class Implementation;
 private:
   rmf_utils::impl_ptr<Implementation> _pimpl;
@@ -767,6 +776,13 @@ public:
   /// Should robots in this fleet have responsive wait enabled by default?
   bool default_responsive_wait() const;
 
+  /// Should robots use the parking reservation system.
+  bool using_parking_reservation_system() const;
+
+  /// Set whether this fleet uses the parking reservation system.
+  void use_parking_reservation_system(
+    const bool use);
+
   /// Set whether robots in this fleet should have responsive wait enabled by
   /// default.
   void set_default_responsive_wait(bool enable);
@@ -820,6 +836,17 @@ public:
   /// \sa set_lift_emergency_level
   const std::unordered_map<std::string, std::string>&
   lift_emergency_levels() const;
+
+  /// A set of lanes which must strictly be navigated from from the start to end
+  /// of the lane when used. This means when replanning, the planner cannot ask
+  /// a robot in the middle of one of these lanes to immediately go to the end
+  /// of the lane.
+  const std::unordered_set<std::size_t>& strict_lanes() const;
+
+  /// Get a mutable reference to the set of strict lanes.
+  ///
+  /// \sa strict_lanes
+  std::unordered_set<std::size_t>& change_strict_lanes();
 
   class Implementation;
 private:
