@@ -43,6 +43,9 @@ struct RequestLift
     std::shared_ptr<rmf_traffic::schedule::Itinerary> resume_itinerary =
       nullptr;
     std::optional<rmf_traffic::agv::Plan::Waypoint> hold_point = std::nullopt;
+
+    std::optional<agv::RobotUpdateHandle::LiftDestination>
+    final_lift_destination = std::nullopt;
   };
 
   class ActivePhase : public LegacyTask::ActivePhase,
@@ -80,6 +83,7 @@ struct RequestLift
     std::shared_ptr<EndLiftSession::Active> _lift_end_phase;
     rmf_rxcpp::subscription_guard _reset_session_subscription;
     std::shared_ptr<void> _destination_handle;
+    std::shared_ptr<std::string> _current_boarded_lift_level;
     bool _finished = false;
 
     struct WatchdogInfo
@@ -126,6 +130,11 @@ struct RequestLift
     const std::string& lift_name() const
     {
       return _lift_name;
+    }
+
+    Data& data()
+    {
+      return _data;
     }
 
   private:
