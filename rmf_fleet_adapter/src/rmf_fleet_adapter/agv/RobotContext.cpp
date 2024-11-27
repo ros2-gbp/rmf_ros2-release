@@ -26,54 +26,18 @@
 #include <rmf_door_msgs/msg/door_mode.hpp>
 
 #include <rmf_utils/math.hpp>
+#include <string>
+#include <unordered_set>
 
 namespace rmf_fleet_adapter {
 namespace agv {
 
 //==============================================================================
-void NavParams::search_for_location(
-  const std::string& map,
-  Eigen::Vector3d position,
-  RobotContext& context)
+std::unordered_map<std::size_t, VertexStack> compute_stacked_vertices(
+  const rmf_traffic::agv::Graph& graph,
+  double max_merge_waypoint_distance)
 {
-  auto planner = context.planner();
-  if (!planner)
-  {
-    RCLCPP_ERROR(
-      context.node()->get_logger(),
-      "Planner unavailable for robot [%s], cannot update its location",
-      context.requester_id().c_str());
-    return;
-  }
-  const auto& graph = planner->get_configuration().graph();
-  const auto now = context.now();
-  auto starts = compute_plan_starts(graph, map, position, now);
-  if (!starts.empty())
-  {
-    if (context.debug_positions)
-    {
-      std::stringstream ss;
-      ss << __FILE__ << "|" << __LINE__ << ": " << starts.size()
-         << " starts:" << print_starts(starts, graph);
-      std::cout << ss.str() << std::endl;
-    }
-    context.set_location(std::move(starts));
-  }
-  else
-  {
-    if (context.debug_positions)
-    {
-      std::cout << __FILE__ << "|" << __LINE__ << ": setting robot to LOST | "
-                << map << " <" << position.block<2, 1>(0, 0).transpose()
-                << "> orientation " << position[2] * 180.0 / M_PI << std::endl;
-    }
-    context.set_lost(Location { now, map, position });
-  }
-}
-
-//==============================================================================
-void NavParams::find_stacked_vertices(const rmf_traffic::agv::Graph& graph)
-{
+  std::unordered_map<std::size_t, VertexStack> stacked_vertices;
   for (std::size_t i = 0; i < graph.num_waypoints() - 1; ++i)
   {
     const auto& wp_i = graph.get_waypoint(i);
@@ -128,6 +92,72 @@ void NavParams::find_stacked_vertices(const rmf_traffic::agv::Graph& graph)
       stacked_vertices[j] = stack_j;
     }
   }
+
+  return stacked_vertices;
+}
+
+//==============================================================================
+void NavParams::search_for_location(
+  const std::string& map,
+  Eigen::Vector3d position,
+  RobotContext& context)
+{
+  auto planner = context.planner();
+  const auto& graph = context.navigation_graph();
+  if (!planner)
+  {
+    RCLCPP_ERROR(
+      context.node()->get_logger(),
+      "Planner unavailable for robot [%s], cannot update its location",
+      context.requester_id().c_str());
+    return;
+  }
+  const auto now = context.now();
+  auto starts = compute_plan_starts(context, map, position, now);
+  if (!starts.empty())
+  {
+    if (context.debug_positions)
+    {
+      std::stringstream ss;
+      ss << __FILE__ << "|" << __LINE__ << ": " << starts.size()
+         << " starts:" << print_starts(starts, graph);
+      std::cout << ss.str() << std::endl;
+    }
+    context.set_location(std::move(starts));
+  }
+  else
+  {
+    if (context.debug_positions)
+    {
+      std::cout << __FILE__ << "|" << __LINE__ << ": setting robot to LOST | "
+                << map << " <" << position.block<2, 1>(0, 0).transpose()
+                << "> orientation " << position[2] * 180.0 / M_PI << std::endl;
+    }
+    context.set_lost(Location { now, map, position });
+  }
+}
+
+rmf_traffic::agv::Plan::StartSet NavParams::compute_plan_starts(
+  const RobotContext& context,
+  const std::string& map_name,
+  const Eigen::Vector3d position,
+  const rmf_traffic::Time start_time) const
+{
+  const auto& graph = context.navigation_graph();
+  auto unfiltered = unfiltered_compute_plan_starts(
+    graph, map_name, position, start_time);
+
+  if (!unfiltered.empty())
+    return process_locations(std::move(unfiltered), context);
+
+  return {};
+}
+
+//==============================================================================
+void NavParams::find_stacked_vertices(const rmf_traffic::agv::Graph& graph)
+{
+  stacked_vertices = compute_stacked_vertices(
+    graph, max_merge_waypoint_distance);
 }
 
 //==============================================================================
@@ -163,10 +193,15 @@ std::string NavParams::get_vertex_name(
 
 //==============================================================================
 rmf_traffic::agv::Plan::StartSet NavParams::process_locations(
-  const rmf_traffic::agv::Graph& graph,
-  rmf_traffic::agv::Plan::StartSet locations) const
+  rmf_traffic::agv::Plan::StartSet locations,
+  const RobotContext& context) const
 {
-  return _lift_boundary_filter(graph, _descend_stacks(graph, locations));
+  return _strict_lane_filter(
+    _lift_boundary_filter(
+      _descend_stacks(
+        context.navigation_graph(),
+        locations),
+      context));
 }
 
 //==============================================================================
@@ -269,29 +304,57 @@ rmf_traffic::agv::Plan::StartSet NavParams::_descend_stacks(
 
 //==============================================================================
 rmf_traffic::agv::Plan::StartSet NavParams::_lift_boundary_filter(
-  const rmf_traffic::agv::Graph& graph,
-  rmf_traffic::agv::Plan::StartSet locations) const
+  rmf_traffic::agv::Plan::StartSet locations,
+  const RobotContext& context) const
 {
+  std::string correct_map;
+  if (const auto level = context.current_boarded_lift_level())
+  {
+    correct_map = *level;
+  }
+  else if (const auto location = context.reported_location())
+  {
+    correct_map = location->map;
+  }
+
+  const auto& graph = context.navigation_graph();
+  const auto valid_waypoint = [&graph, &correct_map](std::size_t wp_index)
+    {
+      if (correct_map.empty())
+        return true;
+
+      const auto& wp_map = graph.get_waypoint(wp_index).get_map_name();
+      return wp_map == correct_map;
+    };
+
+  const auto valid_lane = [&graph, &correct_map, valid_waypoint](
+    std::size_t lane_index)
+    {
+      const auto& wp = graph.get_lane(lane_index).entry().waypoint_index();
+      return valid_waypoint(wp);
+    };
+
   const auto r_it = std::remove_if(
     locations.begin(),
     locations.end(),
-    [&graph](const rmf_traffic::agv::Plan::Start& location)
+    [&graph, valid_waypoint,
+    valid_lane](const rmf_traffic::agv::Plan::Start& location)
     {
       if (location.lane().has_value())
       {
         // If the intention is to move along a lane, then it is okay to keep
-        // this. If the lane is entering or exiting the lift, then it should
-        // have the necessary events.
-        // TODO(@mxgrey): Should we check and make sure that the event is
-        // actually present?
-        return false;
+        // this, as long as the first waypoint is on the correct map.
+
+        // TODO(@mxgrey): Should we check and make sure that the right events
+        // are actually present?
+        return !valid_lane(*location.lane());
       }
 
       if (!location.location().has_value())
       {
-        // If the robot is perfectly on some waypoint then there is no need to
-        // filter.
-        return false;
+        // If the robot is perfectly on some waypoint then we should only check
+        // if it's on the correct map.
+        return !valid_waypoint(location.waypoint());
       }
 
       const Eigen::Vector2d p = location.location().value();
@@ -315,6 +378,28 @@ rmf_traffic::agv::Plan::StartSet NavParams::_lift_boundary_filter(
       // If the robot's lift status and the waypoint's lift status don't match
       // then we should filter this waypoint out.
       return wp.in_lift() != robot_inside_lift;
+    });
+
+  locations.erase(r_it, locations.end());
+  return locations;
+}
+
+//==============================================================================
+rmf_traffic::agv::Plan::StartSet NavParams::_strict_lane_filter(
+  rmf_traffic::agv::Plan::StartSet locations) const
+{
+  const auto r_it = std::remove_if(
+    locations.begin(),
+    locations.end(),
+    [this](const rmf_traffic::agv::Plan::Start& location)
+    {
+      const auto lane = location.lane();
+      if (lane.has_value())
+      {
+        return this->strict_lanes.count(*lane) > 0;
+      }
+
+      return false;
     });
 
   locations.erase(r_it, locations.end());
@@ -614,6 +699,18 @@ void RobotContext::set_nav_params(std::shared_ptr<NavParams> value)
 }
 
 //==============================================================================
+bool RobotContext::robot_finishing_request() const
+{
+  return _robot_finishing_request;
+}
+
+//==============================================================================
+void RobotContext::robot_finishing_request(bool robot_specific)
+{
+  _robot_finishing_request = robot_specific;
+}
+
+//==============================================================================
 class RobotContext::NegotiatorLicense
 {
 public:
@@ -903,6 +1000,12 @@ rmf_traffic::Duration RobotContext::get_lift_rewait_duration() const
 }
 
 //==============================================================================
+uint64_t RobotContext::last_reservation_request_id()
+{
+  return _last_reservation_request_id++;
+}
+
+//==============================================================================
 void RobotContext::respond(
   const TableViewerPtr& table_viewer,
   const ResponderPtr& responder)
@@ -1051,6 +1154,20 @@ const LiftDestination* RobotContext::current_lift_destination() const
 }
 
 //==============================================================================
+bool RobotContext::has_lift_arrived(
+  const std::string& lift_name,
+  const std::string& destination_floor) const
+{
+  if (!_lift_destination)
+    return false;
+
+  if (!_lift_destination->matches(lift_name, destination_floor))
+    return false;
+
+  return _lift_arrived;
+}
+
+//==============================================================================
 std::shared_ptr<void> RobotContext::set_lift_destination(
   std::string lift_name,
   std::string destination_floor,
@@ -1079,17 +1196,35 @@ void RobotContext::release_lift()
       "Releasing lift [%s] for [%s]",
       _lift_destination->lift_name.c_str(),
       requester_id().c_str());
-    rmf_lift_msgs::msg::LiftRequest msg;
-    msg.lift_name = _lift_destination->lift_name;
-    msg.request_type = rmf_lift_msgs::msg::LiftRequest::REQUEST_END_SESSION;
-    msg.session_id = requester_id();
-    msg.destination_floor = _lift_destination->destination_floor;
-    _node->lift_request()->publish(msg);
   }
   _lift_destination = nullptr;
   _initial_time_idle_outside_lift = std::nullopt;
   _lift_stubbornness = nullptr;
   _lift_arrived = false;
+  clear_final_lift_destination();
+}
+
+//==============================================================================
+std::optional<RobotUpdateHandle::LiftDestination>
+RobotContext::final_lift_destination() const
+{
+  std::unique_lock<std::mutex> lock(*_final_lift_destination_mutex);
+  return _final_lift_destination;
+}
+
+//==============================================================================
+void RobotContext::set_final_lift_destination(
+  RobotUpdateHandle::LiftDestination destination)
+{
+  std::unique_lock<std::mutex> lock(*_final_lift_destination_mutex);
+  _final_lift_destination = std::move(destination);
+}
+
+//==============================================================================
+void RobotContext::clear_final_lift_destination()
+{
+  std::unique_lock<std::mutex> lock(*_final_lift_destination_mutex);
+  _final_lift_destination = std::nullopt;
 }
 
 //==============================================================================
@@ -1174,7 +1309,9 @@ RobotContext::RobotContext(
   _current_task_end_state(state),
   _current_task_id(std::nullopt),
   _task_planner(std::move(task_planner)),
-  _reporting(_worker)
+  _reporting(_worker),
+  _last_reservation_request_id(0),
+  _use_parking_spot_reservations(false)
 {
   _most_recent_valid_location = _location;
   _profile = std::make_shared<rmf_traffic::Profile>(
@@ -1283,6 +1420,33 @@ void RobotContext::schedule_hold(
 }
 
 //==============================================================================
+std::shared_ptr<const std::string>
+RobotContext::current_boarded_lift_level() const
+{
+  return _current_boarded_lift_level.lock();
+}
+
+//==============================================================================
+void RobotContext::_set_current_boarded_lift_level(
+  std::shared_ptr<const std::string> lift_level)
+{
+  _current_boarded_lift_level = lift_level;
+}
+
+//==============================================================================
+std::shared_ptr<const Location> RobotContext::reported_location() const
+{
+  return _reported_location;
+}
+
+//==============================================================================
+void RobotContext::_set_reported_location(
+  std::shared_ptr<const Location> value)
+{
+  _reported_location = std::move(value);
+}
+
+//==============================================================================
 void RobotContext::_set_task_manager(std::shared_ptr<TaskManager> mgr)
 {
   _task_manager = std::move(mgr);
@@ -1326,6 +1490,20 @@ void RobotContext::_release_door(const std::string& door_name)
 }
 
 //==============================================================================
+void RobotContext::_set_lift_arrived(
+  const std::string& lift_name,
+  const std::string& destination_floor)
+{
+  if (!_lift_destination)
+    return;
+
+  if (!_lift_destination->matches(lift_name, destination_floor))
+    return;
+
+  _lift_arrived = true;
+}
+
+//==============================================================================
 void RobotContext::_check_lift_state(
   const rmf_lift_msgs::msg::LiftState& state)
 {
@@ -1333,11 +1511,29 @@ void RobotContext::_check_lift_state(
   {
     if (_lift_destination && !_lift_destination->requested_from_inside)
     {
-      // The lift destination reference count dropping to one while the lift
-      // destination request is on the outside means the task that prompted the
-      // lift usage was cancelled while the robot was outside of the lift.
-      // Therefore we should release the usage of the lift.
-      release_lift();
+      const auto now = std::chrono::steady_clock::now();
+      if (_initial_time_idle_outside_lift.has_value())
+      {
+        const auto lapse = now - *_initial_time_idle_outside_lift;
+        if (lapse > std::chrono::seconds(30))
+        {
+          // The lift destination reference count dropping to one while the lift
+          // destination request is on the outside means the task that prompted
+          // the lift usage was cancelled while the robot was outside of the lift.
+          // Therefore we should release the usage of the lift.
+          RCLCPP_INFO(
+            _node->get_logger(),
+            "Requesting lift [%s] to be released for [%s] because it is outside "
+            "the lift and not holding a claim for an extended period of time.",
+            _lift_destination->lift_name.c_str(),
+            requester_id().c_str());
+          release_lift();
+        }
+      }
+      else
+      {
+        _initial_time_idle_outside_lift = now;
+      }
     }
     else if (_lift_destination && !_current_task_id.has_value())
     {
@@ -1362,7 +1558,7 @@ void RobotContext::_check_lift_state(
         if (_initial_time_idle_outside_lift.has_value())
         {
           const auto lapse = now - *_initial_time_idle_outside_lift;
-          if (lapse > std::chrono::seconds(2))
+          if (lapse > std::chrono::seconds(10))
           {
             RCLCPP_INFO(
               _node->get_logger(),
@@ -1370,8 +1566,8 @@ void RobotContext::_check_lift_state(
               "outside of the lift.",
               _lift_destination->lift_name.c_str(),
               requester_id().c_str());
+            release_lift();
           }
-          release_lift();
         }
         else
         {
@@ -1389,6 +1585,7 @@ void RobotContext::_check_lift_state(
       msg.lift_name = state.lift_name;
       msg.request_type = rmf_lift_msgs::msg::LiftRequest::REQUEST_END_SESSION;
       msg.session_id = requester_id();
+      msg.request_time = _node->now();
       _node->lift_request()->publish(msg);
     }
 
@@ -1399,9 +1596,6 @@ void RobotContext::_check_lift_state(
         // Be a stubborn negotiator while using the lift
         _lift_stubbornness = be_stubborn();
       }
-
-      _lift_arrived =
-        _lift_destination->destination_floor == state.current_floor;
     }
   }
   else if (_lift_destination && _lift_destination->lift_name == state.lift_name)
@@ -1443,10 +1637,17 @@ void RobotContext::_check_door_supervisor(
 {
   const auto now = std::chrono::steady_clock::now();
   const auto dt = std::chrono::seconds(10);
-  if (_last_active_task_time + dt < now)
+  if (_current_task_id.has_value())
   {
-    // Do not hold a door if a robot is idle for more than 10 seconds
-    _holding_door = std::nullopt;
+    _last_active_task_time = now;
+  }
+  else
+  {
+    if (_last_active_task_time + dt < now)
+    {
+      // Do not hold a door if a robot is idle for more than 10 seconds
+      _holding_door = std::nullopt;
+    }
   }
 
   for (const auto& door : state.all_sessions)
@@ -1639,6 +1840,192 @@ void RobotContext::_publish_mutex_group_requests()
   {
     publish(MutexGroupData{name, time});
   }
+}
+
+//==============================================================================
+void RobotContext::_set_allocated_destination(
+  const rmf_reservation_msgs::msg::ReservationAllocation& ticket)
+{
+  _reservation_mgr.replace_ticket(ticket);
+}
+
+//==============================================================================
+void RobotContext::_set_parking_spot_manager(const bool enabled)
+{
+  _use_parking_spot_reservations = enabled;
+}
+
+//==============================================================================
+bool RobotContext::_parking_spot_manager_enabled()
+{
+  return _use_parking_spot_reservations;
+}
+
+//==============================================================================
+void RobotContext::_cancel_allocated_destination()
+{
+  return _reservation_mgr.cancel();
+}
+
+//==============================================================================
+std::string RobotContext::_get_reserved_location()
+{
+  return _reservation_mgr.get_reserved_location();
+}
+
+//==============================================================================
+bool RobotContext::_has_ticket() const
+{
+  return _reservation_mgr.has_ticket();
+}
+
+//==============================================================================
+std::vector<rmf_traffic::agv::Plan::Goal>
+RobotContext::_find_and_sort_parking_spots(
+  const bool same_floor) const
+{
+  std::vector<rmf_traffic::agv::Plan::Goal> final_result;
+  // Retrieve nav graph
+  const auto& graph = navigation_graph();
+
+  // Get current location
+  auto current_location = location();
+  if (current_location.size() == 0)
+  {
+    // Could not localize should probably log an error
+    RCLCPP_ERROR(node()->get_logger(), "Unable to localize.");
+    return final_result;
+  }
+
+  // Order wait points by the distance from the destination.
+  std::vector<std::tuple<double, rmf_traffic::agv::Plan::Goal>>
+  waitpoints_order;
+  for (std::size_t wp_idx = 0; wp_idx < graph.num_waypoints(); ++wp_idx)
+  {
+    const auto& wp = graph.get_waypoint(wp_idx);
+
+    if (!wp.is_parking_spot())
+    {
+      continue;
+    }
+
+    if (same_floor)
+    {
+
+      // Check if same map. If not don't consider location. This is to ensure
+      // the robot does not try to board a lift.
+      if (wp.get_map_name() != map())
+      {
+        RCLCPP_INFO(
+          node()->get_logger(),
+          "Skipping [%lu] as it is on map [%s] but robot is on map [%s].",
+          wp_idx,
+          wp.get_map_name().c_str(),
+          map().c_str());
+        continue;
+      }
+    }
+    auto result = planner()->quickest_path(current_location, wp_idx);
+    if (!result.has_value())
+    {
+      RCLCPP_INFO(
+        node()->get_logger(),
+        "No path found for waypoint #%lu",
+        wp_idx);
+      continue;
+    }
+
+    rmf_traffic::agv::Plan::Goal goal(wp_idx);
+    waitpoints_order.emplace_back(result->cost(), goal);
+
+  }
+
+  //Sort waiting points
+  std::sort(waitpoints_order.begin(), waitpoints_order.end(),
+    [](const std::tuple<double, rmf_traffic::agv::Plan::Goal>& a,
+    const std::tuple<double, rmf_traffic::agv::Plan::Goal>& b)
+    {
+      return std::get<0>(a) < std::get<0>(b);
+    });
+
+
+  for (auto&[_, waitpoint]: waitpoints_order)
+  {
+    final_result.push_back(waitpoint);
+  }
+  return final_result;
+}
+
+//==============================================================================
+std::vector<rmf_traffic::agv::Plan::Goal>
+RobotContext::_find_and_sort_parking_spots(
+  const rmf_traffic::agv::Plan::Goal& dest, const bool same_floor) const
+{
+  std::vector<rmf_traffic::agv::Plan::Goal> final_result;
+  // Retrieve nav graph
+  const auto& graph = navigation_graph();
+
+  // Get current location
+  rmf_traffic::agv::Plan::StartSet start;
+  start.emplace_back(now(), dest.waypoint(), 0);
+
+  // Order wait points by the distance from the destination.
+  std::vector<std::tuple<double, rmf_traffic::agv::Plan::Goal>>
+  waitpoints_order;
+  for (std::size_t wp_idx = 0; wp_idx < graph.num_waypoints(); ++wp_idx)
+  {
+    const auto& wp = graph.get_waypoint(wp_idx);
+
+    if (!wp.is_parking_spot())
+    {
+      continue;
+    }
+
+    if (same_floor)
+    {
+
+      // Check if same map. If not don't consider location. This is to ensure
+      // the robot does not try to board a lift.
+      if (wp.get_map_name() != map())
+      {
+        RCLCPP_INFO(
+          node()->get_logger(),
+          "Skipping [%lu] as it is on map [%s] but robot is on map [%s].",
+          wp_idx,
+          wp.get_map_name().c_str(),
+          map().c_str());
+        continue;
+      }
+    }
+    auto result = planner()->quickest_path(start, wp_idx);
+    if (!result.has_value())
+    {
+      RCLCPP_INFO(
+        node()->get_logger(),
+        "No path found for waypoint #%lu",
+        wp_idx);
+      continue;
+    }
+
+    rmf_traffic::agv::Plan::Goal goal(wp_idx);
+    waitpoints_order.emplace_back(result->cost(), goal);
+
+  }
+
+  //Sort waiting points
+  std::sort(waitpoints_order.begin(), waitpoints_order.end(),
+    [](const std::tuple<double, rmf_traffic::agv::Plan::Goal>& a,
+    const std::tuple<double, rmf_traffic::agv::Plan::Goal>& b)
+    {
+      return std::get<0>(a) < std::get<0>(b);
+    });
+
+
+  for (auto&[_, waitpoint]: waitpoints_order)
+  {
+    final_result.push_back(waitpoint);
+  }
+  return final_result;
 }
 
 //==============================================================================
