@@ -1,0 +1,104 @@
+ros-kilted-rmf-reservation-node (2.9.0-2bookworm) bookworm; urgency=high
+
+  * Adds a simple parking spot management system.  (#325 <https://github.com/open-rmf/rmf_ros2/issues/325>)
+  * Contributors: Arjo Chakravarty
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Wed, 27 Nov 2024 06:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.8.0-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Wed, 12 Jun 2024 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.7.1-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Mon, 10 Jun 2024 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.7.0-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Sat, 08 Jun 2024 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.6.0-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Wed, 13 Mar 2024 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.5.0-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Fri, 22 Dec 2023 06:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.4.0-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Fri, 15 Dec 2023 06:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.3.2-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Mon, 28 Aug 2023 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.3.1-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Thu, 10 Aug 2023 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.3.0-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Wed, 07 Jun 2023 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.2.0-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Tue, 06 Jun 2023 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.1.5-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Sat, 20 May 2023 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.1.4-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Tue, 02 May 2023 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.1.3-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Wed, 26 Apr 2023 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (2.0.0-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Fri, 29 Apr 2022 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (1.5.0-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Tue, 15 Mar 2022 05:00:00 -0000
+
+ros-kilted-rmf-reservation-node (1.4.0-2bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Thu, 02 Sep 2021 05:00:00 -0000
+
+
