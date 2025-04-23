@@ -1,1 +1,1 @@
-{"base": "5501de17", "parent": "debian/rolling/rmf_traffic_ros2", "previous": "cd2344b5", "trim": "", "trimbase": ""}
+{"base": "c49b81be37b6", "parent": "debian/kilted/rmf_traffic_ros2", "previous": "e3ca170f9e02", "trim": "", "trimbase": ""}
