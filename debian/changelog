@@ -1,0 +1,161 @@
+ros-kilted-rmf-fleet-adapter-python (2.9.0-2noble) noble; urgency=high
+
+  * Allow automatic action cancellation to be toggled (#392 <https://github.com/open-rmf/rmf_ros2/issues/392>)
+  * Adds a simple parking spot management system.  (#325 <https://github.com/open-rmf/rmf_ros2/issues/325>)
+  * Allow robot-specific finishing request and specify parking spots (#379 <https://github.com/open-rmf/rmf_ros2/issues/379>)
+  * Provide an API that says the robot's lift destination (#376 <https://github.com/open-rmf/rmf_ros2/issues/376>)
+  * Quiet cancel API (#357 <https://github.com/open-rmf/rmf_ros2/issues/357>)
+  * Contributors: Arjo Chakravarty, Grey, Xiyu
+
+ -- methylDragon <methylDragon@gmail.com>  Wed, 27 Nov 2024 06:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.8.0-2noble) noble; urgency=high
+
+
+
+ -- methylDragon <methylDragon@gmail.com>  Wed, 12 Jun 2024 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.7.1-2noble) noble; urgency=high
+
+
+
+ -- methylDragon <methylDragon@gmail.com>  Tue, 11 Jun 2024 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.7.0-2noble) noble; urgency=high
+
+  * Add fleet-level reassign dispatched tasks API (#348 <https://github.com/open-rmf/rmf_ros2/pull/348>)
+  * Disable automatic retreat (#330 <https://github.com/open-rmf/rmf_ros2/pull/330>)
+  * Stabilize commissioning feature (#338 <https://github.com/open-rmf/rmf_ros2/pull/338>)
+  * Add all_known_lifts in Graph binding (#336 <https://github.com/open-rmf/rmf_ros2/pull/336>)
+  * Add Speed Limit Requests (#335 <https://github.com/open-rmf/rmf_ros2/pull/335>)
+  * Contributors: cwrx777, Grey, Pranay Shirodkar, Xiyu, Yadunund
+
+ -- methylDragon <methylDragon@gmail.com>  Sat, 01 Jun 2024 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.6.0-2noble) noble; urgency=high
+
+  * add in_lift readonly property in Graph::Waypoint binding. (#326 <https://github.com/open-rmf/rmf_ros2/pull/326>)
+  * Contributors: cwrx777
+
+ -- methylDragon <methylDragon@gmail.com>  Wed, 13 Mar 2024 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.5.0-2noble) noble; urgency=high
+
+
+
+ -- methylDragon <methylDragon@gmail.com>  Fri, 22 Dec 2023 06:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.4.0-2noble) noble; urgency=high
+
+
+
+ -- methylDragon <methylDragon@gmail.com>  Fri, 15 Dec 2023 06:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.3.2-2noble) noble; urgency=high
+
+  * EasyFullControl API (#235 <https://github.com/open-rmf/rmf_ros2/pull/235>)
+  * Contributors: Grey, Luca Della Vedova, Xiyu, Yadunund
+
+ -- methylDragon <methylDragon@gmail.com>  Mon, 28 Aug 2023 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.3.1-2noble) noble; urgency=high
+
+  * Adding initiator and request time to booking (#267 <https://github.com/open-rmf/rmf_ros2/pull/267>)
+  * Contributors: Aaron Chong
+
+ -- methylDragon <methylDragon@gmail.com>  Thu, 10 Aug 2023 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.3.0-2noble) noble; urgency=high
+
+
+
+ -- methylDragon <methylDragon@gmail.com>  Thu, 08 Jun 2023 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.2.0-2noble) noble; urgency=high
+
+  * Switch to rst changelogs (#276 <https://github.com/open-rmf/rmf_ros2/pull/276>)
+  * Contributors: Yadunund
+
+ -- methylDragon <methylDragon@gmail.com>  Tue, 06 Jun 2023 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.1.5-2noble) noble; urgency=high
+
+
+
+ -- methylDragon <methylDragon@gmail.com>  Sat, 20 May 2023 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.1.4-2noble) noble; urgency=high
+
+
+
+ -- methylDragon <methylDragon@gmail.com>  Thu, 27 Apr 2023 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.1.3-2noble) noble; urgency=high
+
+
+
+ -- methylDragon <methylDragon@gmail.com>  Wed, 26 Apr 2023 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.1.2-2noble) noble; urgency=high
+
+
+
+ -- methylDragon <methylDragon@gmail.com>  Mon, 10 Oct 2022 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.1.0-2noble) noble; urgency=high
+
+  * Make async behaviors more robust: (#228 <https://github.com/open-rmf/rmf_ros2/pull/228>)
+  * Allow fleet adapters to change schedule participant profiles: (#229 <https://github.com/open-rmf/rmf_ros2/pull/229>)
+  * Allow robots to be decommissioned from the task dispatch system: (#233 <https://github.com/open-rmf/rmf_ros2/pull/233>)
+  * Allow manual toggling of stubborn negotiation: (#196 <https://github.com/open-rmf/rmf_ros2/pull/196>)
+  * Allow users to specify a custom update listener: (#198 <https://github.com/open-rmf/rmf_ros2/pull/198>)
+  * Fix various segfaults related to pybind: (#205 <https://github.com/open-rmf/rmf_ros2/pull/205>)
+  * Allow ResponsiveWait to be enabled and disabled: (#209 <https://github.com/open-rmf/rmf_ros2/pull/209>)
+  * Allow robot status to be overridden by the user: (#191 <https://github.com/open-rmf/rmf_ros2/pull/191>)
+  * Add API to report status for perform_action: (#190 <https://github.com/open-rmf/rmf_ros2/pull/190>)
+  * Changes for humble compatibility: (#215 <https://github.com/open-rmf/rmf_ros2/pull/215>)
+
+ -- methylDragon <methylDragon@gmail.com>  Mon, 03 Oct 2022 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (2.0.0-2noble) noble; urgency=high
+
+  No changes yet
+
+ -- methylDragon <methylDragon@gmail.com>  Fri, 18 Mar 2022 05:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (1.5.0-2noble) noble; urgency=high
+
+  * Support flexible task definitions (#168 <https://github.com/open-rmf/rmf_ros2/pull/168>)
+  * Add lane speed limit to graph parsing function (#124 <https://github.com/open-rmf/rmf_ros2/pull/124>)
+
+ -- methylDragon <methylDragon@gmail.com>  Mon, 14 Feb 2022 06:00:00 -0000
+
+ros-kilted-rmf-fleet-adapter-python (1.3.0-2noble) noble; urgency=high
+
+  * Modifications to support refactor of rmf_task (#51 <https://github.com/open-rmf/rmf_ros2/pull/51>)
+  * Fix symlink-install compilation (#32 <https://github.com/open-rmf/rmf_ros2/pull/32>)
+  * Updated package.xml (#26 <https://github.com/open-rmf/rmf_ros2/pull/26>)
+  * Fix/rmf task ros2 cleanup (#21 <https://github.com/open-rmf/rmf_ros2/pull/21>)
+  * Feature/python binding planner (#11 <https://github.com/open-rmf/rmf_ros2/pull/11>)
+  * Adding reference_internal tag to function bindings that return raw pointers (#6 <https://github.com/open-rmf/rmf_ros2/pull/6>)
+  * Feature/add unstable participant api (#11 <https://github.com/open-rmf/rmf_ros2/pull/11>)
+  * Feature/add simple docs (#9 <https://github.com/open-rmf/rmf_ros2/pull/9>)
+  * Support apis for task dispatcher (#10 <https://github.com/open-rmf/rmf_ros2/pull/10>)
+  * differentiate functions to prevent overloading (#8 <https://github.com/open-rmf/rmf_ros2/pull/8>)
+  * support ez traffic light (#7 <https://github.com/open-rmf/rmf_ros2/pull/7>)
+  * Update/release 1.1 (#6 <https://github.com/open-rmf/rmf_ros2/pull/6>)
+  * Implement binding for Duration optional
+  * Make integration test even stricter
+  * Add reference capture for posterity
+  * Add clarifying printouts and fix multi-timer bug
+  * Integrate compute_plan_starts into integration test
+  * Implement type tests
+  * Bind optional constructors and delivery msg interfaces
+  * Bind compute_plan_starts
+  * Add update_position overload
+  * Implement Python Bindings for rmf_fleet_adapter (#1 <https://github.com/open-rmf/rmf_ros2/pull/1>)
+  * Contributors: Aaron Chong, Charayaphan Nakorn Boon Han, Geoffrey Biggs, Grey, Marco A. Gutiérrez, Yadu, methylDragon, youliang
+
+ -- methylDragon <methylDragon@gmail.com>  Mon, 07 Jun 2021 05:00:00 -0000
+
+
