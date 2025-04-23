@@ -1,0 +1,12 @@
+Source: ros-kilted-rmf-task-ros2
+Section: misc
+Priority: optional
+Maintainer: Yadunund <yadunund@openrobotics.org>
+Build-Depends: debhelper (>= 9.0.0), libeigen3-dev, nlohmann-json3-dev, ros-kilted-ament-cmake, ros-kilted-ament-cmake-catch2 <!nocheck>, ros-kilted-ament-cmake-uncrustify <!nocheck>, ros-kilted-backward-ros, ros-kilted-nlohmann-json-schema-validator-vendor, ros-kilted-rclcpp, ros-kilted-rmf-api-msgs, ros-kilted-rmf-task-msgs, ros-kilted-rmf-traffic, ros-kilted-rmf-traffic-ros2, ros-kilted-rmf-utils, ros-kilted-rmf-websocket, ros-kilted-ros-workspace
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-kilted-rmf-task-ros2
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, nlohmann-json3-dev, ros-kilted-backward-ros, ros-kilted-nlohmann-json-schema-validator-vendor, ros-kilted-rclcpp, ros-kilted-rmf-api-msgs, ros-kilted-rmf-task-msgs, ros-kilted-rmf-traffic, ros-kilted-rmf-traffic-ros2, ros-kilted-rmf-utils, ros-kilted-rmf-websocket, ros-kilted-ros-workspace
+Description: A package managing the dispatching of tasks in RMF system.
