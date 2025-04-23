@@ -1,1 +1,1 @@
-{"base": "7796ec60", "parent": "debian/rolling/rmf_reservation_node", "previous": "504a1879", "trim": "", "trimbase": ""}
+{"base": "3ff3296dcc43", "parent": "debian/kilted/rmf_reservation_node", "previous": "6411301c6cae", "trim": "", "trimbase": ""}
