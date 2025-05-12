@@ -1,0 +1,143 @@
+ros-rolling-rmf-task-ros2 (2.10.0-1noble) noble; urgency=high
+
+  * Do not update assignments if bid notice is for a dry run (#401 <https://github.com/open-rmf/rmf_ros2/issues/401>)
+  * Use unique name for exported targets and avoid exporting binary targets (#396 <https://github.com/open-rmf/rmf_ros2/issues/396>)
+  * Contributors: Luca Della Vedova, yadunund
+
+ -- Yadunund <yadunund@openrobotics.org>  Fri, 09 May 2025 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.9.0-1noble) noble; urgency=high
+
+  * Publish fleet and task updates over ROS 2 if websocket is not provided (#383 <https://github.com/open-rmf/rmf_ros2/issues/383>)
+  * Fix incorrect std rounding function used when generating timestamp strings for task ID (#366 <https://github.com/open-rmf/rmf_ros2/issues/366>)
+  * Contributors: Aaron Chong
+
+ -- Yadunund <yadunund@openrobotics.org>  Wed, 27 Nov 2024 08:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.8.0-1noble) noble; urgency=high
+
+
+
+ -- Yadunund <yadunund@openrobotics.org>  Wed, 12 Jun 2024 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.7.1-1noble) noble; urgency=high
+
+
+
+ -- Yadunund <yadunund@openrobotics.org>  Tue, 11 Jun 2024 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.7.0-1noble) noble; urgency=high
+
+  * Fix race condition for ingesting/dispensing and disable uncrustify tests by default (#362 <https://github.com/open-rmf/rmf_ros2/pull/362>)
+  * Dispatcher only use websockets when dispatch fails (#355 <https://github.com/open-rmf/rmf_ros2/pull/355>)
+  * Contributors: Aaron Chong, Grey, Luca Della Vedova, Yadunund
+
+ -- Yadunund <yadunund@openrobotics.org>  Sat, 01 Jun 2024 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.6.0-1noble) noble; urgency=high
+
+  * Add Backward-ROS for improved logging in event of segfaults (#327 <https://github.com/open-rmf/rmf_ros2/pull/327>)
+  * Explicitly specify all qos depth (#323 <https://github.com/open-rmf/rmf_ros2/pull/323>)
+  * Adds an option to generate unique hex strings for new task ids, fix time stamp logic (#319 <https://github.com/open-rmf/rmf_ros2/pull/319>)
+  * Contributors: Aaron Chong, Arjo Chakravarty, Teo Koon Peng
+
+ -- Yadunund <yadunund@openrobotics.org>  Wed, 13 Mar 2024 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.5.0-1noble) noble; urgency=high
+
+
+
+ -- Yadunund <yadunund@openrobotics.org>  Fri, 22 Dec 2023 08:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.4.0-1noble) noble; urgency=high
+
+
+
+ -- Yadunund <yadunund@openrobotics.org>  Fri, 15 Dec 2023 08:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.3.2-1noble) noble; urgency=high
+
+  * Improve linking time (#297 <https://github.com/open-rmf/rmf_ros2/pull/297>)
+  * Contributors: Grey, Luca Della Vedova
+
+ -- Yadunund <yadunund@openrobotics.org>  Mon, 28 Aug 2023 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.3.1-1noble) noble; urgency=high
+
+  * Adding initiator and request time to booking (#267 <https://github.com/open-rmf/rmf_ros2/pull/267>)
+  * Contributors: Aaron Chong
+
+ -- Yadunund <yadunund@openrobotics.org>  Thu, 10 Aug 2023 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.3.0-1noble) noble; urgency=high
+
+
+
+ -- Yadunund <yadunund@openrobotics.org>  Thu, 08 Jun 2023 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.2.0-1noble) noble; urgency=high
+
+  * Switch to rst changelogs (#276 <https://github.com/open-rmf/rmf_ros2/pull/276>)
+  * Contributors: Yadunund
+
+ -- Yadunund <yadunund@openrobotics.org>  Tue, 06 Jun 2023 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.1.5-1noble) noble; urgency=high
+
+  * Reformat code to meet expectations of uncrustify-0.72.0: (#274 <https://github.com/open-rmf/rmf_ros2/pull/274>)
+  * Contributors: Yadunund
+
+ -- Yadunund <yadunund@openrobotics.org>  Sat, 20 May 2023 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.1.4-1noble) noble; urgency=high
+
+
+
+ -- Yadunund <yadunund@openrobotics.org>  Thu, 27 Apr 2023 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.1.3-1noble) noble; urgency=high
+
+  * Link Threads to fix build errors on certain platforms: (#204 <https://github.com/open-rmf/rmf_ros2/pull/204>)
+  * Contributors: decada-robotics, Grey
+
+ -- Yadunund <yadunund@openrobotics.org>  Wed, 26 Apr 2023 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.1.2-1noble) noble; urgency=high
+
+  * Add find_package for vendored project.
+    The vendor package for nlohmann_json_schema_validator was previously
+    exporting dependency info for that package, however that is not the
+    recommended workflow for vendor packages which are ideally as
+    transparent as possible.
+  * Contributors: Steven! Ragnarök
+
+ -- Yadunund <yadunund@openrobotics.org>  Mon, 10 Oct 2022 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.1.0-1noble) noble; urgency=high
+
+  * Change default task auction evaluator to QuickestFinishEvaluator: (#211 <https://github.com/open-rmf/rmf_ros2/pull/211>)
+  * ws broadcast client in dispatcher node (#212 <https://github.com/open-rmf/rmf_ros2/pull/212>)
+  * create unique task_id with timestamp (#223 <https://github.com/open-rmf/rmf_ros2/pull/223>)
+  * Changes for humble compatibility: (#215 <https://github.com/open-rmf/rmf_ros2/pull/215>)
+
+ -- Yadunund <yadunund@openrobotics.org>  Mon, 03 Oct 2022 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (2.0.0-1noble) noble; urgency=high
+
+  No changes yet
+
+ -- Yadunund <yadunund@openrobotics.org>  Fri, 18 Mar 2022 07:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (1.5.0-1noble) noble; urgency=high
+
+  * Support flexible task definitions (#168 <https://github.com/open-rmf/rmf_ros2/pull/168>)
+
+ -- Yadunund <yadunund@openrobotics.org>  Mon, 14 Feb 2022 08:00:00 -0000
+
+ros-rolling-rmf-task-ros2 (1.3.0-1noble) noble; urgency=high
+
+  * Introduce dispatcher node to facilitate dispatching of tasks: (#217 <https://github.com/osrf/rmf_core/pull/217>)
+
+ -- Yadunund <yadunund@openrobotics.org>  Wed, 13 Jan 2021 08:00:00 -0000
+
+
