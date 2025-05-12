@@ -78,6 +78,10 @@ std::shared_ptr<Node> Node::make(
     node->create_observable<EmergencyNotice>(
     rmf_traffic_ros2::EmergencyTopicName, transient_qos);
 
+  node->_target_emergency_notice_obs =
+    node->create_observable<TargetEmergencyNotice>(
+    rmf_traffic_ros2::EmergencySignalTopicName, transient_qos);
+
   node->_ingestor_request_pub =
     node->create_publisher<IngestorRequest>(
     IngestorRequestTopicName, default_qos);
@@ -139,9 +143,9 @@ std::shared_ptr<Node> Node::make(
     node->create_publisher<ReservationRelease>(
     ReservationReleaseTopicName, transient_local_qos);
 
-  node->_reservation_cancel_pub =
-    node->create_publisher<ReservationCancel>(
-    ReservationCancelTopicName, transient_local_qos);
+  node->_general_dynamic_event_description_pub =
+    node->create_publisher<DynamicEventDescription>(
+      DynamicEventBeginTopicBase, transient_local_qos);
 
   return node;
 }
@@ -231,6 +235,14 @@ auto Node::emergency_notice() const -> const EmergencyNoticeObs&
   return _emergency_notice_obs->observe();
 }
 
+//==============================================================================
+auto Node::target_emergency_notice() const -> const TargetEmergencyNoticeObs&
+{
+  return _target_emergency_notice_obs->observe();
+}
+
+//==============================================================================
+
 auto Node::ingestor_request() const -> const IngestorRequestPub&
 {
   return _ingestor_request_pub;
@@ -315,9 +327,10 @@ auto Node::release_location() const -> const ReservationReleasePub&
 }
 
 //==============================================================================
-auto Node::cancel_reservation() const -> const ReservationCancelPub&
+const DynamicEventDescriptionPub& Node::all_dynamic_event_descriptions() const
 {
-  return _reservation_cancel_pub;
+  return _general_dynamic_event_description_pub;
 }
+
 } // namespace agv
 } // namespace rmf_fleet_adapter
