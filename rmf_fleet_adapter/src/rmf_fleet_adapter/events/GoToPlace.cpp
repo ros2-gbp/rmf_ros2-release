@@ -200,12 +200,6 @@ auto GoToPlace::Active::make(
         if (const auto c = self->_context->command())
           c->stop();
 
-
-        RCLCPP_INFO(
-          self->_context->node()->get_logger(),
-          "Goal selected %s",
-          wp_name(*self->_context, self->_chosen_goal.value()).c_str());
-
         self->_find_plan();
       }
     });
@@ -429,11 +423,6 @@ void GoToPlace::Active::cancel()
   _stop_and_clear();
   _state->update_status(Status::Canceled);
   _state->update_log().info("Received signal to cancel");
-
-  if (_context->_parking_spot_manager_enabled())
-  {
-    _reservation_client->cancel();
-  }
   _finished();
 }
 
@@ -443,10 +432,6 @@ void GoToPlace::Active::kill()
   _stop_and_clear();
   _state->update_status(Status::Killed);
   _state->update_log().info("Received signal to kill");
-  if (_context->_parking_spot_manager_enabled())
-  {
-    _reservation_client->cancel();
-  }
   _finished();
 }
 
