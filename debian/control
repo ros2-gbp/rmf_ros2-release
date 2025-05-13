@@ -1,0 +1,12 @@
+Source: ros-rolling-rmf-charging-schedule
+Section: misc
+Priority: optional
+Maintainer: Grey <mxgrey@intrinsic.ai>
+Build-Depends: debhelper (>= 9.0.0), ros-rolling-rclpy, ros-rolling-rmf-fleet-msgs, ros-rolling-ros-workspace, python3-all, python3-setuptools, dh-python
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-rolling-rmf-charging-schedule
+Architecture: any
+Depends: ${python3:Depends}, ${misc:Depends}, ros-rolling-rclpy, ros-rolling-rmf-fleet-msgs, ros-rolling-ros-workspace
+Description: Node for a fixed 24-hour rotating charger usage schedule
