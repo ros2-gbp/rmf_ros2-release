@@ -25,6 +25,7 @@ include(GNUInstallDirs)
 
 set(dep_pkgs
   rclcpp
+  rclcpp_action
   rclcpp_components
   rmf_utils
   rmf_dispenser_msgs
@@ -38,6 +39,7 @@ set(dep_pkgs
   rmf_battery
   rmf_task
   rmf_task_sequence
+  rmf_reservation_msgs
   std_msgs
   rmf_api_msgs
   rmf_websocket
@@ -88,7 +90,9 @@ ament_target_dependencies(rmf_fleet_adapter
     rmf_dispenser_msgs
     rmf_ingestor_msgs
     rmf_building_map_msgs
+    rmf_reservation_msgs
     rclcpp
+    rclcpp_action
 )
 
 target_link_libraries(rmf_fleet_adapter
@@ -115,6 +119,7 @@ target_include_directories(rmf_fleet_adapter
     ${rmf_dispenser_msgs_INCLUDE_DIRS}
     ${rmf_ingestor_msgs_INCLUDE_DIRS}
     ${rmf_api_msgs_INCLUDE_DIRS}
+    ${rmf_reservation_msgs_INCLUDE_DIRS}
     ${rmf_websocket_INCLUDE_DIR}
     ${rmf_traffic_ros2_INCLUDE_DIRS}
     ${rmf_building_map_msgs_INCLUDE_DIRS}
@@ -152,6 +157,7 @@ if (BUILD_TESTING)
       std_msgs
       rmf_building_map_msgs
       rmf_websocket
+      rmf_reservation_msgs
   )
   target_include_directories(test_rmf_fleet_adapter
     PRIVATE
@@ -513,12 +519,22 @@ rmf_api_generate_schema_headers(
 
 # -----------------------------------------------------------------------------
 
-ament_export_targets(rmf_fleet_adapter HAS_LIBRARY_TARGET)
+ament_export_targets(export_rmf_fleet_adapter HAS_LIBRARY_TARGET)
 ament_export_dependencies(${dep_pkgs})
 
+# Install the libraries
 install(
   TARGETS
     rmf_fleet_adapter
+  EXPORT export_rmf_fleet_adapter
+  RUNTIME DESTINATION lib/rmf_fleet_adapter
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)
+
+# Install the binaries
+install(
+  TARGETS
     read_only
     read_only_blockade
     mock_traffic_light
@@ -534,10 +550,7 @@ install(
     close_lanes
     interrupt_robot
     robot_state_aggregator_main
-  EXPORT rmf_fleet_adapter
-  RUNTIME DESTINATION lib/rmf_fleet_adapter
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
+  DESTINATION lib/rmf_fleet_adapter
 )
 
 # -----------------------------------------------------------------------------
