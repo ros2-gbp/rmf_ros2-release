@@ -1,0 +1,12 @@
+Source: ros-rolling-rmf-websocket
+Section: misc
+Priority: optional
+Maintainer: Yadunund <yadunund@openrobotics.org>
+Build-Depends: debhelper (>= 9.0.0), libboost-all-dev, libeigen3-dev, libwebsocketpp-dev, nlohmann-json3-dev, ros-rolling-ament-cmake, ros-rolling-ament-cmake-catch2 <!nocheck>, ros-rolling-ament-cmake-uncrustify <!nocheck>, ros-rolling-nlohmann-json-schema-validator-vendor, ros-rolling-rclcpp, ros-rolling-rmf-utils, ros-rolling-ros-workspace
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-rolling-rmf-websocket
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libboost-all-dev, libwebsocketpp-dev, nlohmann-json3-dev, ros-rolling-nlohmann-json-schema-validator-vendor, ros-rolling-rclcpp, ros-rolling-rmf-utils, ros-rolling-ros-workspace
+Description: A package managing the websocket api endpoints in RMF system.
