@@ -242,6 +242,39 @@ void RobotUpdateHandle::update_position(
 }
 
 //==============================================================================
+RobotUpdateHandle& RobotUpdateHandle::use_parking_reservation_system(bool use)
+{
+  if (const auto context = _pimpl->get_context())
+  {
+    context->worker().schedule([use, w = context->weak_from_this()](
+        const auto&)
+      {
+        const auto self = w.lock();
+        if (!self)
+          return;
+
+        self->_set_parking_spot_manager(use);
+
+        std::string status;
+        if (use)
+        {
+          status = "enabled";
+        }
+        else
+        {
+          status = "disabled";
+        }
+
+        RCLCPP_INFO(
+          self->node()->get_logger(),
+          "Parking reservation system %s for %s",
+          status.c_str(),
+          self->requester_id().c_str());
+      });
+  }
+}
+
+//==============================================================================
 RobotUpdateHandle& RobotUpdateHandle::set_charger_waypoint(
   const std::size_t charger_wp)
 {
@@ -261,6 +294,50 @@ RobotUpdateHandle& RobotUpdateHandle::set_charger_waypoint(
           self->requester_id().c_str(),
           charger_wp);
       });
+  }
+
+  return *this;
+}
+
+//==============================================================================
+RobotUpdateHandle& RobotUpdateHandle::set_finishing_request(
+  rmf_task::ConstRequestFactoryPtr finishing_request)
+{
+  if (const auto context = _pimpl->get_context())
+  {
+    context->worker().schedule(
+      [finishing_request, w = context->weak_from_this()](
+        const auto&)
+      {
+        const auto context = w.lock();
+        if (!context)
+          return;
+
+        const auto mgr = context->task_manager();
+        mgr->set_idle_task(finishing_request);
+      });
+  }
+
+  return *this;
+}
+
+//==============================================================================
+RobotUpdateHandle& RobotUpdateHandle::use_default_finishing_request()
+{
+  if (const auto context = _pimpl->get_context())
+  {
+    context->worker().schedule([w = context->weak_from_this()](const auto&)
+      {
+        const auto context = w.lock();
+        if (!context)
+          return;
+
+        const auto mgr = context->task_manager();
+        mgr->use_default_idle_task();
+        // Disable robot_finishing_request flag in RobotContext
+        context->robot_finishing_request(false);
+      }
+    );
   }
 
   return *this;
@@ -829,6 +906,37 @@ void RobotUpdateHandle::reassign_dispatched_tasks()
 }
 
 //==============================================================================
+RobotUpdateHandle::LiftDestination::LiftDestination()
+  : _pimpl(rmf_utils::make_impl<Implementation>())
+{
+  // Do nothing
+}
+
+//==============================================================================
+const std::string& RobotUpdateHandle::LiftDestination::lift() const
+{
+  return _pimpl->lift;
+}
+
+//==============================================================================
+const std::string& RobotUpdateHandle::LiftDestination::level() const
+{
+  return _pimpl->level;
+}
+
+//==============================================================================
+std::optional<RobotUpdateHandle::LiftDestination>
+RobotUpdateHandle::lift_destination() const
+{
+  if (const auto context = _pimpl->get_context())
+  {
+    return context->final_lift_destination();
+  }
+
+  return std::nullopt;
+}
+
+//==============================================================================
 RobotUpdateHandle::RobotUpdateHandle()
 {
   // Do nothing
@@ -1003,6 +1111,37 @@ void RobotUpdateHandle::Unstable::debug_positions(bool on)
 }
 
 //==============================================================================
+void RobotUpdateHandle::Unstable::quiet_cancel_task(
+  std::string task_id,
+  std::vector<std::string> labels,
+  std::function<void(bool)> on_cancellation)
+{
+  if (const auto context = _pimpl->get_context())
+  {
+    context->worker().schedule(
+      [
+        task_id = std::move(task_id),
+        labels = std::move(labels),
+        on_cancellation = std::move(on_cancellation),
+        c = context->weak_from_this()
+      ](const auto&)
+      {
+        const auto context = c.lock();
+        if (!context)
+          return;
+
+        const auto mgr = context->task_manager();
+        if (!mgr)
+          return;
+
+        const auto result = mgr->quiet_cancel_task(task_id, labels);
+        if (on_cancellation)
+          on_cancellation(result);
+      });
+  }
+}
+
+//==============================================================================
 void RobotUpdateHandle::ActionExecution::update_remaining_time(
   rmf_traffic::Duration remaining_time_estimate)
 {
@@ -1104,6 +1243,22 @@ void RobotUpdateHandle::ActionExecution::finished()
 bool RobotUpdateHandle::ActionExecution::okay() const
 {
   return _pimpl->data->okay;
+}
+
+//==============================================================================
+void RobotUpdateHandle::ActionExecution::set_automatic_cancel(bool on)
+{
+  if (_pimpl->data)
+  {
+    if (const auto context = _pimpl->data->w_context.lock())
+    {
+      context->worker().schedule(
+        [on, self = _pimpl->data](const auto&)
+        {
+          self->automatic_cancel = on;
+        });
+    }
+  }
 }
 
 //==============================================================================
