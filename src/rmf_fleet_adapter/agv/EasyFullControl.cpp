@@ -122,6 +122,7 @@ public:
   std::optional<double> max_merge_waypoint_distance;
   std::optional<double> max_merge_lane_distance;
   std::optional<double> min_lane_length;
+  std::optional<rmf_task::ConstRequestFactoryPtr> finishing_request;
 };
 
 //==============================================================================
@@ -136,7 +137,8 @@ EasyFullControl::RobotConfiguration::RobotConfiguration(
       responsive_wait,
       max_merge_waypoint_distance,
       max_merge_lane_distance,
-      min_lane_length
+      min_lane_length,
+      std::nullopt
     }))
 {
   // Do nothing
@@ -212,6 +214,20 @@ void EasyFullControl::RobotConfiguration::set_min_lane_length(
 }
 
 //==============================================================================
+std::optional<rmf_task::ConstRequestFactoryPtr> EasyFullControl::
+RobotConfiguration::finishing_request() const
+{
+  return _pimpl->finishing_request;
+}
+
+//==============================================================================
+void EasyFullControl::RobotConfiguration::set_finishing_request(
+  std::optional<rmf_task::ConstRequestFactoryPtr> request)
+{
+  _pimpl->finishing_request = std::move(request);
+}
+
+//==============================================================================
 class EasyFullControl::RobotCallbacks::Implementation
 {
 public:
@@ -279,6 +295,7 @@ public:
   rmf_traffic::Duration planned_wait_time;
   std::optional<ScheduleOverride> schedule_override;
   std::shared_ptr<NavParams> nav_params;
+  std::optional<double> speed_limit;
   std::function<void(rmf_traffic::Duration)> arrival_estimator;
 
   void release_stubbornness()
@@ -373,6 +390,13 @@ public:
           continue;
         }
 
+        if (nav_params->strict_lanes.count(lane_id) > 0)
+        {
+          // The robot needs to fully approach the beginning waypoint before
+          // using this lane
+          continue;
+        }
+
         auto wp_exit = graph.get_lane(lane_id).exit().waypoint_index();
         starts.push_back(
           rmf_traffic::agv::Plan::Start(now, wp_exit, yaw, p, lane_id));
@@ -398,6 +422,12 @@ public:
 
         if (closures && closures->is_closed(lane_id))
         {
+          continue;
+        }
+
+        if (nav_params->strict_lanes.count(lane_id) > 0)
+        {
+          // This is a strict lane, so we cannot start from its middle.
           continue;
         }
 
@@ -453,7 +483,7 @@ public:
 
     if (starts.empty())
     {
-      starts = nav_params->compute_plan_starts(graph, map, location, now);
+      starts = nav_params->compute_plan_starts(*context, map, location, now);
     }
 
     if (!starts.empty())
@@ -515,7 +545,12 @@ public:
       }
 
       const auto& traits = planner->get_configuration().vehicle_traits();
-      const auto v = std::max(traits.linear().get_nominal_velocity(), 0.001);
+      double v = std::max(traits.linear().get_nominal_velocity(), 0.001);
+      if (speed_limit.has_value())
+      {
+        v = std::min(v, *speed_limit);
+      }
+
       const auto w =
         std::max(traits.rotational().get_nominal_velocity(), 0.001);
       const auto t = distance / v + rotation / w;
@@ -847,6 +882,7 @@ public:
   };
 
   EasyCommandHandle(
+    std::shared_ptr<Location> reported_location,
     std::shared_ptr<NavParams> nav_params,
     NavigationRequest handle_nav_request,
     StopRequest handle_stop);
@@ -888,6 +924,8 @@ public:
   std::weak_ptr<RobotContext> w_context;
   std::shared_ptr<NavParams> nav_params;
   std::shared_ptr<ProgressTracker> current_progress;
+  std::shared_ptr<Location> reported_location;
+  rclcpp::TimerBase::SharedPtr localize_timer;
 
   // Callbacks from user
   NavigationRequest handle_nav_request;
@@ -896,10 +934,12 @@ public:
 
 //==============================================================================
 EasyCommandHandle::EasyCommandHandle(
+  std::shared_ptr<Location> reported_location_,
   std::shared_ptr<NavParams> nav_params_,
   NavigationRequest handle_nav_request_,
   StopRequest handle_stop_)
 : nav_params(std::move(nav_params_)),
+  reported_location(std::move(reported_location_)),
   handle_nav_request(std::move(handle_nav_request_)),
   handle_stop(std::move(handle_stop_))
 {
@@ -1021,9 +1061,21 @@ void EasyCommandHandle::follow_new_path(
   for (std::size_t i = 0; i < waypoints.size(); ++i)
   {
     const auto& wp = waypoints[i];
-    if (wp.graph_index().has_value())
+    for (const auto& l : current_location)
     {
-      for (const auto& l : current_location)
+      if (!nav_params->skip_rotation_commands)
+      {
+        // If the waypoint and robot orientations are not aligned with
+        // skip rotation command set to False, we will not consider this as
+        // a connection
+        if (std::abs(wp.position()[2] -
+          l.orientation())*180.0 / M_PI > 1e-2)
+        {
+          continue;
+        }
+      }
+
+      if (wp.graph_index().has_value())
       {
         if (nav_params->in_same_stack(*wp.graph_index(),
           l.waypoint()) && !l.lane().has_value())
@@ -1074,10 +1126,7 @@ void EasyCommandHandle::follow_new_path(
           }
         }
       }
-    }
-    else
-    {
-      for (const auto& l : current_location)
+      else
       {
         Eigen::Vector2d p_l;
         if (l.location().has_value())
@@ -1103,6 +1152,17 @@ void EasyCommandHandle::follow_new_path(
       {
         for (const auto& l : current_location)
         {
+          if (!nav_params->skip_rotation_commands)
+          {
+            // If the waypoint and robot orientations are not aligned with
+            // skip rotation command set to False, we will not consider this as
+            // a connection
+            if (std::abs(wp.position()[2] -
+              l.orientation())*180.0 / M_PI > 1e-2)
+            {
+              continue;
+            }
+          }
           if (l.lane().has_value())
           {
             if (lane == *l.lane())
@@ -1191,10 +1251,19 @@ void EasyCommandHandle::follow_new_path(
     }
 
     std::optional<double> speed_limit;
-    if (!wp1.approach_lanes().empty())
+    for (const auto arrival_lane : wp1.approach_lanes())
     {
-      const auto arrival_lane = wp1.approach_lanes().back();
-      speed_limit = graph.get_lane(arrival_lane).properties().speed_limit();
+      if (const auto lane_speed_limit = graph.get_lane(arrival_lane).properties().speed_limit())
+      {
+        if (!speed_limit.has_value())
+        {
+          speed_limit = lane_speed_limit;
+        }
+        else if (*lane_speed_limit < *speed_limit)
+        {
+          speed_limit = lane_speed_limit;
+        }
+      }
     }
 
     Eigen::Vector3d target_position = wp1.position();
@@ -1268,6 +1337,7 @@ void EasyCommandHandle::follow_new_path(
           planned_wait_time,
           std::nullopt,
           nav_params,
+          speed_limit,
           [next_arrival_estimator_, target_index,
           target_p](rmf_traffic::Duration dt)
           {
@@ -1290,6 +1360,117 @@ void EasyCommandHandle::follow_new_path(
   this->current_progress = ProgressTracker::make(
     queue,
     path_finished_callback_);
+
+  if (initial_map != reported_location->map)
+  {
+    // The robot has not localized to the current map yet. This should only
+    // happen when a replan happens while the robot is inside of a lift.
+    RCLCPP_WARN(
+      context->node()->get_logger(),
+      "Relocalizing robot [%s] from map [%s] to [%s] because of a mismatch "
+      "while starting to follow a new path",
+      context->requester_id().c_str(),
+      initial_map.c_str(),
+      reported_location->map.c_str());
+
+    auto localize = EasyFullControl::Destination::Implementation::make(
+      initial_map,
+      reported_location->position,
+      std::nullopt,
+      "",
+      std::nullopt,
+      nullptr);
+
+    // Create a shared reference to the current progress. We will swap this
+    // out for a nullptr after the first time we trigger the current_progress
+    // to make sure it's impossible for the user to do anything that would
+    // double-trigger it.
+    auto progress_ref =
+      std::make_shared<std::shared_ptr<ProgressTracker>>(current_progress);
+
+    auto begin_following_path =
+      [w = weak_from_this(), progress_ref]()
+      {
+        if (!progress_ref)
+        {
+          throw std::runtime_error(
+                  "[rmf_fleet_adapter::agv::EasyFullControl::follow_new_path] "
+                  "progress_ref was not initialized. This should never happen. "
+                  "please report this bug to the RMF maintainers.");
+        }
+
+        if (!*progress_ref)
+        {
+          // This was already triggered
+          return;
+        }
+
+        const auto self = w.lock();
+        if (!self)
+        {
+          // The adapter is deconstructing
+          return;
+        }
+
+        if (self->current_progress != *progress_ref)
+        {
+          // The robot is following a new path
+          return;
+        }
+
+        self->localize_timer = nullptr;
+        self->current_progress->next();
+        *progress_ref = nullptr;
+      };
+
+    auto localize_cmd = EasyFullControl::CommandExecution::Implementation
+      ::make_hold(
+      context,
+      waypoints.front().time(),
+      context->itinerary().current_plan_id(),
+      [worker = context->worker(), begin_following_path]()
+      {
+        worker.schedule([begin_following_path](const auto&)
+        {
+          begin_following_path();
+        });
+      });
+
+    if (context->localize(std::move(localize), std::move(localize_cmd)))
+    {
+      localize_timer = context->node()->try_create_wall_timer(
+        std::chrono::seconds(300),
+        [begin_following_path, w = weak_from_this()]()
+        {
+          const auto self = w.lock();
+          if (!self)
+            return;
+
+          const auto context = self->w_context.lock();
+          if (!context)
+            return;
+
+          RCLCPP_ERROR(
+            context->node()->get_logger(),
+            "Waiting for robot [%s] to localize timed out. Please ensure that "
+            "your localization function triggers execution.finished() when the "
+            "robot's localization process is finished.",
+            context->requester_id().c_str());
+
+          begin_following_path();
+        });
+
+      // Return here to avoid triggering current_progress->next() at the end of
+      // this function so that it can be triggered when the downstream
+      // integrator triggers the finished callback.
+      return;
+    }
+
+    // If context->localize(...) returned false then that means the downstream
+    // integrator isn't handling localization commands and therefore will never
+    // trigger the finish callback, so we should proceed to call
+    // current_progress->next() below.
+  }
   this->current_progress->next();
 }
 
@@ -1405,6 +1586,8 @@ void EasyCommandHandle::dock(
     .value_or(rmf_traffic::Duration(0));
   const rmf_traffic::Time expected_arrival = now + dt - initial_delay;
 
+  const auto speed_limit = lane.properties().speed_limit();
+
   auto data = EasyFullControl::CommandExecution::Implementation::Data{
     {i0, i1},
     {*found_lane},
@@ -1413,6 +1596,7 @@ void EasyCommandHandle::dock(
     rmf_traffic::Duration(0),
     std::nullopt,
     nav_params,
+    speed_limit,
     [w_context = context->weak_from_this(), expected_arrival, plan_id](
       rmf_traffic::Duration dt)
     {
@@ -1449,6 +1633,97 @@ void EasyCommandHandle::dock(
   {
     angle = std::atan2(dy, dx);
   }
+  const Eigen::Vector2d course_vector = p1 - p0;
+  Eigen::Vector3d entry_position(p0.x(), p0.y(), angle);
+  const auto* entry_constraint = lane.entry().orientation_constraint();
+  if (entry_constraint)
+  {
+    entry_constraint->apply(entry_position, course_vector);
+    angle = entry_position[2];
+  }
+  Eigen::Vector3d exit_position(p1.x(), p1.y(), angle);
+  const auto* exit_constraint = lane.exit().orientation_constraint();
+  if (exit_constraint)
+  {
+    exit_constraint->apply(exit_position, course_vector);
+    angle = exit_position[2];
+  }
+
+  std::vector<EasyFullControl::CommandExecution> queue;
+
+  // Check that robot is in position and facing the docking point
+  const auto current_pose = reported_location->position;
+  if (!nav_params->skip_rotation_commands &&
+    std::abs(angle - current_pose[2]) > 1e-2)
+  {
+    RCLCPP_DEBUG(
+      context->node()->get_logger(),
+      "Inserting rotation command for [%s] because it is requested to dock "
+      "but is not facing the docking position.",
+      context->requester_id().c_str());
+
+    const Eigen::Vector3d target_orientation(p0.x(), p0.y(), angle);
+    const auto command_rotation = to_robot_coordinates(
+      wp0.get_map_name(), target_orientation);
+    auto rot_destination = EasyFullControl::Destination::Implementation::make(
+      wp0.get_map_name(),
+      command_rotation,
+      i0,
+      nav_params->get_vertex_name(graph, i0),
+      lane.properties().speed_limit(),
+      wp0.in_lift());
+
+    const double w = std::max(traits.rotational().get_nominal_velocity(), 0.001);
+    const auto turn = rmf_traffic::time::from_seconds(angle / w);
+    queue.push_back(
+      EasyFullControl::CommandExecution::Implementation::make(
+        context,
+        EasyFullControl::CommandExecution::Implementation::Data{
+          {i0, i1},
+          {*found_lane},
+          p0,
+          angle,
+          rmf_traffic::Duration(0),
+          std::nullopt,
+          nav_params,
+          speed_limit,
+          [w_context = context->weak_from_this(), expected_arrival, plan_id](
+            rmf_traffic::Duration turn)
+          {
+            const auto context = w_context.lock();
+            if (!context)
+            {
+              return;
+            }
+
+            context->worker().schedule([
+                w = context->weak_from_this(),
+                expected_arrival,
+                plan_id,
+                turn
+              ](const auto&)
+              {
+                const auto context = w.lock();
+                if (!context)
+                  return;
+
+                const rmf_traffic::Time now = context->now();
+                const auto updated_arrival = now + turn;
+                const auto delay = updated_arrival - expected_arrival;
+                context->itinerary().cumulative_delay(
+                  plan_id, delay, std::chrono::seconds(1));
+              });
+          }
+        },
+        [
+          handle_nav_request = this->handle_nav_request,
+          rot_destination = std::move(rot_destination)
+        ](EasyFullControl::CommandExecution execution)
+        {
+          handle_nav_request(rot_destination, execution);
+        }
+    ));
+  }
 
   const Eigen::Vector3d position(p1.x(), p1.y(), angle);
   const auto command_position = to_robot_coordinates(
@@ -1459,11 +1734,11 @@ void EasyCommandHandle::dock(
     command_position,
     i1,
     nav_params->get_vertex_name(graph, i1),
-    lane.properties().speed_limit(),
+    speed_limit,
     wp1.in_lift(),
     dock_name_);
 
-  auto cmd = EasyFullControl::CommandExecution::Implementation::make(
+  queue.push_back(EasyFullControl::CommandExecution::Implementation::make(
     context,
     data,
     [
@@ -1473,10 +1748,10 @@ void EasyCommandHandle::dock(
       EasyFullControl::CommandExecution execution)
     {
       handle_nav_request(destination, execution);
-    });
+    }));
 
   this->current_progress = ProgressTracker::make(
-    {std::move(cmd)},
+    queue,
     std::move(docking_finished_callback_));
   this->current_progress->next();
 }
@@ -1490,6 +1765,152 @@ ConsiderRequest consider_all()
     };
 }
 
+std::optional<rmf_task::ConstRequestFactoryPtr> parse_finishing_request(
+  const YAML::Node& finishing_request_yaml,
+  const rmf_traffic::agv::Graph& graph,
+  std::optional<std::string> robot_name,
+  bool& error)
+{
+  rmf_task::ConstRequestFactoryPtr finishing_request;
+  std::string finishing_request_string;
+
+  if (!finishing_request_yaml)
+  {
+    if (robot_name.has_value())
+    {
+      // No finishing request is provided for this specific robot, default to
+      // fleet-wide finishing request by returning nullopt.
+      return std::nullopt;
+    }
+    // No finishing request specified for fleet, default to nothing.
+    std::cout
+      << "A default finishing request was not provided for the fleet. The "
+      "valid finishing requests are [charge, park, nothing]. The task planner "
+      "will default to [nothing]."
+      << std::endl;
+    return finishing_request;
+  }
+
+  if (finishing_request_yaml.IsMap())
+  {
+    // Configure the robot-specific finishing request
+    const YAML::Node& request_type_yaml = finishing_request_yaml["type"];
+    std::string request_type_string;
+
+    if (request_type_yaml)
+    {
+      request_type_string = request_type_yaml.as<std::string>();
+      if (request_type_string == "park")
+      {
+        // Check if a specific parking spot waypoint was chosen
+        const YAML::Node& parking_spot_yaml =
+          finishing_request_yaml["waypoint_name"];
+        std::string parking_spot_string;
+        if (parking_spot_yaml)
+        {
+          if (!robot_name.has_value())
+          {
+            // We don't accept this specification for fleet-wide finishing
+            // requests because we can't send all the same robots to the same
+            // parking spot.
+            const auto mark = parking_spot_yaml.Mark();
+            std::cerr
+              << "Cannot assign a specific parking spot waypoint to the "
+              "fleet-wide default finishing request (line " << (mark.line + 1)
+              << ", column " << mark.column << ") because then all robots "
+              "would attempt to park at the same location." << std::endl;
+            error = true;
+            return nullptr;
+          }
+
+          parking_spot_string = parking_spot_yaml.as<std::string>();
+          const auto* parking_wp = graph.find_waypoint(parking_spot_string);
+          if (!parking_wp)
+          {
+            const auto mark = parking_spot_yaml.Mark();
+            std::cerr
+              << "Provided parking spot [" << parking_spot_string
+              << "] (line " << (mark.line + 1) << ", column " << mark.column
+              << ") is not found in the fleet navigation graph. Unable to "
+              "configure the fleet." << std::endl;
+            error = true;
+            return nullptr;
+          }
+
+          std::size_t parking_wp_index = parking_wp->index();
+          finishing_request =
+            std::make_shared<rmf_fleet_adapter::tasks::ParkRobotIndefinitely>(
+            "idle", nullptr, parking_wp_index);
+          std::cout
+            << "Robot [" << robot_name.value()
+            << "] is configured to perform ParkRobot at ["
+            << parking_spot_string << "] as finishing request." << std::endl;
+          return finishing_request;
+        }
+      }
+      finishing_request_string = request_type_string;
+    }
+    else
+    {
+      const auto mark = finishing_request_yaml.Mark();
+      std::cerr
+        << "Missing [type] for finishing_request object (line "
+        << (mark.line + 1) << ", column " << mark.column << ")" << std::endl;
+      error = true;
+      return nullptr;
+    }
+  }
+  else
+  {
+    finishing_request_string = finishing_request_yaml.as<std::string>();
+  }
+
+  if (finishing_request_string == "charge")
+  {
+    auto charge_factory =
+      std::make_shared<rmf_task::requests::ChargeBatteryFactory>();
+    charge_factory->set_indefinite(true);
+    finishing_request = charge_factory;
+  }
+  else if (finishing_request_string == "park")
+  {
+    finishing_request =
+      std::make_shared<rmf_fleet_adapter::tasks::ParkRobotIndefinitely>(
+      "idle", nullptr);
+  }
+  else if (finishing_request_string == "nothing")
+  {
+    // Do nothing
+  }
+  else
+  {
+    const auto mark = finishing_request_yaml.Mark();
+    std::cerr
+      << "The finishing request [" << finishing_request_string << "] (line "
+      << (mark.line + 1) << ", column " << mark.column
+      << ") is unsupported. The valid finishing requests are "
+      "[charge, park, nothing].";
+
+    error = true;
+    return nullptr;
+  }
+
+  if (robot_name.has_value())
+  {
+    std::cout
+      << "Robot-specific finishing task for [" << robot_name.value()
+      << "] set to [" << finishing_request_string << "]" << std::endl;
+  }
+  else
+  {
+    std::cout
+      << "Default fleet finishing task set to [" << finishing_request_string
+      << "]" << std::endl;
+  }
+
+  return finishing_request;
+}
+
 //==============================================================================
 class EasyFullControl::EasyRobotUpdateHandle::Implementation
 {
@@ -1497,11 +1918,15 @@ public:
 
   struct Updater
   {
+    std::shared_ptr<Location> reported_location;
     std::shared_ptr<RobotUpdateHandle> handle;
     std::shared_ptr<NavParams> nav_params;
 
-    Updater(std::shared_ptr<NavParams> params_)
-    : handle(nullptr),
+    Updater(
+      std::shared_ptr<Location> reported_location_,
+      std::shared_ptr<NavParams> params_)
+    : reported_location(std::move(reported_location_)),
+      handle(nullptr),
       nav_params(std::move(params_))
     {
       // Do nothing
@@ -1537,22 +1962,24 @@ public:
   }
 
   Implementation(
+    std::shared_ptr<Location> reported_location_,
     std::shared_ptr<NavParams> params_,
     rxcpp::schedulers::worker worker_)
-  : updater(std::make_shared<Updater>(params_)),
+  : updater(std::make_shared<Updater>(std::move(reported_location_), params_)),
     worker(worker_)
   {
     // Do nothing
   }
 
   static std::shared_ptr<EasyRobotUpdateHandle> make(
+    std::shared_ptr<Location> reported_location_,
     std::shared_ptr<NavParams> params_,
     rxcpp::schedulers::worker worker_)
   {
     auto handle = std::shared_ptr<EasyRobotUpdateHandle>(
       new EasyRobotUpdateHandle);
     handle->_pimpl = rmf_utils::make_unique_impl<Implementation>(
-      std::move(params_), std::move(worker_));
+      std::move(reported_location_), std::move(params_), std::move(worker_));
     return handle;
   }
 };
@@ -1562,6 +1989,7 @@ void EasyFullControl::EasyRobotUpdateHandle::update(
   RobotState state,
   ConstActivityIdentifierPtr current_activity)
 {
+
   _pimpl->worker.schedule(
     [
       state = std::move(state),
@@ -1581,6 +2009,12 @@ void EasyFullControl::EasyRobotUpdateHandle::update(
 
       const auto position = updater->to_rmf_coordinates(
         state.map(), state.position(), *context);
+
+      *updater->reported_location = Location {
+        context->now(),
+        state.map(),
+        position
+      };
 
       if (current_activity)
       {
@@ -1702,6 +2136,8 @@ public:
   double default_max_merge_lane_distance;
   double default_min_lane_length;
   std::unordered_map<std::string, std::string> lift_emergency_levels;
+  std::unordered_set<std::size_t> strict_lanes;
+  bool use_parking_reservation;
 };
 
 //==============================================================================
@@ -1757,7 +2193,9 @@ EasyFullControl::FleetConfiguration::FleetConfiguration(
         std::move(default_max_merge_waypoint_distance),
         std::move(default_max_merge_lane_distance),
         std::move(default_min_lane_length),
-        {}
+        {},
+        {},
+        false // Parking reservation system
       }))
 {
   // Do nothing
@@ -2008,7 +2446,7 @@ EasyFullControl::FleetConfiguration::from_config_files(
   {
     const auto mark = retreat_to_charger_yaml.Mark();
     std::cout << "[retreat_to_charger_interval] Unsupported value type "
-              << "provided: line " << mark.line << ", column " << mark.column
+              << "provided: line " << (mark.line + 1) << ", column " << mark.column
               << std::endl;
     return std::nullopt;
   }
@@ -2060,52 +2498,18 @@ EasyFullControl::FleetConfiguration::from_config_files(
   }
 
   // Finishing tasks
-  std::string finishing_request_string;
-  const auto& finishing_request_yaml = rmf_fleet["finishing_request"];
-  if (!finishing_request_yaml)
+  rmf_task::ConstRequestFactoryPtr default_finishing_request;
+  const auto& default_finishing_request_yaml = rmf_fleet["finishing_request"];
+  bool fleet_request_error = false;
+  auto configured_default_finishing_request = parse_finishing_request(
+    default_finishing_request_yaml, graph, std::nullopt, fleet_request_error);
+  if (fleet_request_error)
   {
-    std::cout
-      << "Finishing request is not provided. The valid finishing requests "
-      "are [charge, park, nothing]. The task planner will default to [nothing]."
-      << std::endl;
+    // Invalid FleetConfiguration
+    return std::nullopt;
   }
-  else
-  {
-    finishing_request_string = finishing_request_yaml.as<std::string>();
-  }
-  std::cout << "Finishing request: " << finishing_request_string << std::endl;
-  rmf_task::ConstRequestFactoryPtr finishing_request;
-  if (finishing_request_string == "charge")
-  {
-    auto charge_factory =
-      std::make_shared<rmf_task::requests::ChargeBatteryFactory>();
-    charge_factory->set_indefinite(true);
-    finishing_request = charge_factory;
-    std::cout
-      << "Fleet is configured to perform ChargeBattery as finishing request"
-      << std::endl;
-  }
-  else if (finishing_request_string == "park")
-  {
-    finishing_request =
-      std::make_shared<rmf_fleet_adapter::tasks::ParkRobotIndefinitely>(
-      "idle", nullptr);
-    std::cout
-      << "Fleet is configured to perform ParkRobot as finishing request"
-      << std::endl;
-  }
-  else if (finishing_request_string == "nothing")
-  {
-    std::cout << "Fleet is not configured to perform any finishing request"
-              << std::endl;
-  }
-  else
-  {
-    std::cout
-      << "Provided finishing request " << finishing_request_string
-      << "is unsupported. The valid finishing requests are"
-      "[charge, park, nothing]. The task planner will default to [nothing].";
-  }
+  if (configured_default_finishing_request.has_value())
+    default_finishing_request = configured_default_finishing_request.value();
 
   // Ignore rotations within path commands
   bool skip_rotation_commands = true;
@@ -2200,6 +2604,14 @@ EasyFullControl::FleetConfiguration::from_config_files(
   if (default_responsive_wait_yaml)
   {
     default_responsive_wait = default_responsive_wait_yaml.as<bool>();
+  }
+
+  bool use_simple_parking_reservation_system = false;
+  const YAML::Node& parking_reservation = rmf_fleet["use_parking_reservations"];
+  if (parking_reservation)
+  {
+    use_simple_parking_reservation_system =
+      parking_reservation.as<bool>();
   }
 
   double default_max_merge_waypoint_distance = 1e-3;
@@ -2297,12 +2709,26 @@ EasyFullControl::FleetConfiguration::from_config_files(
             min_lane_length = min_lane_length_yaml.as<double>();
           }
 
+          std::optional<rmf_task::ConstRequestFactoryPtr> finishing_request =
+            std::nullopt;
+          const YAML::Node& finishing_request_yaml =
+            robot_config_yaml["finishing_request"];
+          bool robot_request_error = false;
+          finishing_request = parse_finishing_request(
+            finishing_request_yaml, graph, robot_name, robot_request_error);
+          if (robot_request_error)
+          {
+            // Invalid FleetConfiguration
+            return std::nullopt;
+          }
+
           auto config = RobotConfiguration(
             std::move(chargers),
             responsive_wait,
             max_merge_waypoint_distance,
             max_merge_lane_distance,
             min_lane_length);
+          config.set_finishing_request(finishing_request);
           known_robot_configurations.insert_or_assign(robot_name, config);
         }
         else
@@ -2338,6 +2764,99 @@ EasyFullControl::FleetConfiguration::from_config_files(
     }
   }
 
+  std::unordered_set<std::size_t> strict_lanes;
+  const YAML::Node& strict_lanes_yaml = rmf_fleet["strict_lanes"];
+  if (strict_lanes_yaml)
+  {
+    if (!strict_lanes_yaml.IsSequence())
+    {
+      std::cerr
+        << "[strict_lanes] element is not a sequence in the config file ["
+        << config_file << "] so we cannot parse which lanes need to be "
+        << "considered strict." << std::endl;
+      return std::nullopt;
+    }
+
+    const auto vertex_stacks = compute_stacked_vertices(
+      graph, default_max_merge_waypoint_distance);
+    for (const auto& lane_yaml : strict_lanes_yaml)
+    {
+      if (!lane_yaml.IsSequence() || lane_yaml.size() != 2)
+      {
+        const auto mark = lane_yaml.Mark();
+        std::cerr << "[strict_lanes] Unrecognized lane format at line "
+          << (mark.line + 1) << ", column " << mark.column << std::endl;
+        return std::nullopt;
+      }
+
+      const auto wp0_name = lane_yaml[0].as<std::string>();
+      const auto wp1_name = lane_yaml[1].as<std::string>();
+      const auto* wp0 = graph.find_waypoint(wp0_name);
+      if (!wp0)
+      {
+        const auto mark = lane_yaml[0].Mark();
+        std::cerr << "[strict_lanes] Unrecognized waypoint name [" << wp0_name
+          << "] at line " << (mark.line + 1) << ", column " << mark.column << std::endl;
+        return std::nullopt;
+      }
+
+      const auto* wp1 = graph.find_waypoint(wp1_name);
+      if (!wp1)
+      {
+        const auto mark = lane_yaml[1].Mark();
+        std::cerr << "[strict_lanes] Unrecognized waypoint name [" << wp1_name
+          << "] at line " << (mark.line + 1) << ", column " << mark.column << std::endl;
+        return std::nullopt;
+      }
+
+      const auto stack_0_it = vertex_stacks.find(wp0->index());
+      VertexStack stack_0;
+      if (stack_0_it == vertex_stacks.end())
+      {
+        stack_0 = std::make_shared<std::unordered_set<std::size_t>>();
+        stack_0->insert(wp0->index());
+      }
+      else
+      {
+        stack_0 = stack_0_it->second;
+      }
+
+      const auto stack_1_it = vertex_stacks.find(wp1->index());
+      VertexStack stack_1;
+      if (stack_1_it == vertex_stacks.end())
+      {
+        stack_1 = std::make_shared<std::unordered_set<std::size_t>>();
+        stack_1->insert(wp1->index());
+      }
+      else
+      {
+        stack_1 = stack_1_it->second;
+      }
+
+      bool found_lane = false;
+      for (std::size_t wp_i : *stack_0)
+      {
+        for (std::size_t wp_j : *stack_1)
+        {
+          const auto* lane = graph.lane_from(wp_i, wp_j);
+          if (lane)
+          {
+            strict_lanes.insert(lane->index());
+            found_lane = true;
+          }
+        }
+      }
+
+      if (!found_lane)
+      {
+        const auto mark = lane_yaml.Mark();
+        std::cerr << "[strict_lanes] Unable to find a lane from [" << wp0_name
+          << "] to [" << wp1_name << "] at line " << (mark.line + 1) << ", column "
+          << mark.column << std::endl;
+      }
+    }
+  }
+
   auto config = FleetConfiguration(
     fleet_name,
     std::move(tf_dict),
@@ -2353,7 +2872,7 @@ EasyFullControl::FleetConfiguration::from_config_files(
     account_for_battery_drain,
     task_consideration,
     action_consideration,
-    finishing_request,
+    default_finishing_request,
     skip_rotation_commands,
     server_uri,
     rmf_traffic::time::from_seconds(max_delay),
@@ -2364,6 +2883,8 @@ EasyFullControl::FleetConfiguration::from_config_files(
     default_min_lane_length);
   config.change_lift_emergency_levels() = lift_emergency_levels;
   config.set_retreat_to_charger_interval(retreat_to_charger_interval);
+  config.use_parking_reservation_system(use_simple_parking_reservation_system);
+  config.change_strict_lanes() = std::move(strict_lanes);
   return config;
 }
 
@@ -2677,6 +3198,20 @@ bool EasyFullControl::FleetConfiguration::default_responsive_wait() const
 }
 
 //==============================================================================
+bool EasyFullControl::FleetConfiguration::using_parking_reservation_system()
+  const
+{
+  return _pimpl->use_parking_reservation;
+}
+
+//==============================================================================
+void EasyFullControl::FleetConfiguration::use_parking_reservation_system(
+  const bool use)
+{
+  _pimpl->use_parking_reservation = use;
+}
+
+//==============================================================================
 void EasyFullControl::FleetConfiguration::set_default_responsive_wait(
   bool enable)
 {
@@ -2748,6 +3283,20 @@ EasyFullControl::FleetConfiguration::lift_emergency_levels() const
 }
 
 //==============================================================================
+const std::unordered_set<std::size_t>&
+EasyFullControl::FleetConfiguration::strict_lanes() const
+{
+  return _pimpl->strict_lanes;
+}
+
+//==============================================================================
+std::unordered_set<std::size_t>&
+EasyFullControl::FleetConfiguration::change_strict_lanes()
+{
+  return _pimpl->strict_lanes;
+}
+
+//==============================================================================
 using EasyCommandHandlePtr = std::shared_ptr<EasyCommandHandle>;
 
 //==============================================================================
@@ -2771,11 +3320,19 @@ auto EasyFullControl::add_robot(
 {
   const auto node = _pimpl->node();
 
+  rmf_traffic::Time now = std::chrono::steady_clock::time_point(
+    std::chrono::nanoseconds(node->now().nanoseconds()));
+
+  auto reported_location = std::make_shared<Location>(Location {
+        now,
+        initial_state.map(),
+        initial_state.position()
+      });
   auto worker =
     FleetUpdateHandle::Implementation::get(*_pimpl->fleet_handle).worker;
   auto robot_nav_params = std::make_shared<NavParams>(_pimpl->nav_params);
   auto easy_updater = EasyRobotUpdateHandle::Implementation::make(
-    robot_nav_params, worker);
+    reported_location, robot_nav_params, worker);
 
   LocalizationRequest localization = nullptr;
   if (callbacks.localize())
@@ -2857,9 +3414,6 @@ auto EasyFullControl::add_robot(
     charger_index = charger_wp->index();
   }
 
-  rmf_traffic::Time now = std::chrono::steady_clock::time_point(
-    std::chrono::nanoseconds(node->now().nanoseconds()));
-
   const auto position_opt = robot_nav_params->to_rmf_coordinates(
     initial_state.map(), initial_state.position());
   if (!position_opt.has_value())
@@ -2893,7 +3447,7 @@ auto EasyFullControl::add_robot(
 
   robot_nav_params->find_stacked_vertices(graph);
   const Eigen::Vector3d position = *position_opt;
-  auto starts = robot_nav_params->compute_plan_starts(
+  auto starts = robot_nav_params->unfiltered_compute_plan_starts(
     graph, initial_state.map(), position, now);
 
   if (starts.empty())
@@ -2933,6 +3487,7 @@ auto EasyFullControl::add_robot(
   }
 
   const auto cmd_handle = std::make_shared<EasyCommandHandle>(
+    reported_location,
     robot_nav_params,
     std::move(handle_nav_request),
     std::move(handle_stop));
@@ -2943,6 +3498,8 @@ auto EasyFullControl::add_robot(
   {
     enable_responsive_wait = *configuration.responsive_wait();
   }
+
+  auto finishing_request = configuration.finishing_request();
 
   _pimpl->fleet_handle->add_robot(
     insertion.first->second,
@@ -2959,7 +3516,9 @@ auto EasyFullControl::add_robot(
       action_executor = callbacks.action_executor(),
       localization = std::move(localization),
       nav_params = robot_nav_params,
-      enable_responsive_wait
+      enable_responsive_wait,
+      use_parking_reservation = _pimpl->use_parking_reservation,
+      finishing_request
     ](const RobotUpdateHandlePtr& updater)
     {
       auto context = RobotUpdateHandle::Implementation::get(*updater)
@@ -2978,10 +3537,13 @@ auto EasyFullControl::add_robot(
           localization,
           context,
           nav_params,
-          enable_responsive_wait
+          enable_responsive_wait,
+          use_parking_reservation,
+          finishing_request
         ](const auto&)
         {
           cmd_handle->w_context = context;
+          context->_set_reported_location(cmd_handle->reported_location);
           context->set_nav_params(nav_params);
           EasyRobotUpdateHandle::Implementation::get(*easy_updater)
           .updater->handle = handle;
@@ -2992,6 +3554,13 @@ auto EasyFullControl::add_robot(
             handle->set_charger_waypoint(*charger_index);
           }
           handle->enable_responsive_wait(enable_responsive_wait);
+          if (finishing_request.has_value())
+          {
+            handle->set_finishing_request(finishing_request.value());
+            context->robot_finishing_request(true);
+          }
+
+          context->_set_parking_spot_manager(use_parking_reservation);
 
           RCLCPP_INFO(
             node->get_logger(),
