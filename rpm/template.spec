@@ -1,0 +1,173 @@
+%bcond_without tests
+%bcond_without weak_deps
+
+%global __os_install_post %(echo '%{__os_install_post}' | sed -e 's!/usr/lib[^[:space:]]*/brp-python-bytecompile[[:space:]].*$!!g')
+%global __provides_exclude_from ^/opt/ros/kilted/.*$
+%global __requires_exclude_from ^/opt/ros/kilted/.*$
+
+Name:           ros-kilted-rmf-fleet-adapter
+Version:        2.10.1
+Release:        1%{?dist}%{?release_suffix}
+Summary:        ROS rmf_fleet_adapter package
+
+License:        Apache License 2.0
+Source0:        %{name}-%{version}.tar.gz
+
+Requires:       json-devel
+Requires:       ros-kilted-backward-ros
+Requires:       ros-kilted-nlohmann-json-schema-validator-vendor
+Requires:       ros-kilted-rclcpp
+Requires:       ros-kilted-rclcpp-action
+Requires:       ros-kilted-rclcpp-components
+Requires:       ros-kilted-rmf-api-msgs
+Requires:       ros-kilted-rmf-battery
+Requires:       ros-kilted-rmf-building-map-msgs
+Requires:       ros-kilted-rmf-dispenser-msgs
+Requires:       ros-kilted-rmf-door-msgs
+Requires:       ros-kilted-rmf-fleet-msgs
+Requires:       ros-kilted-rmf-ingestor-msgs
+Requires:       ros-kilted-rmf-lift-msgs
+Requires:       ros-kilted-rmf-reservation-msgs
+Requires:       ros-kilted-rmf-task
+Requires:       ros-kilted-rmf-task-msgs
+Requires:       ros-kilted-rmf-task-ros2
+Requires:       ros-kilted-rmf-task-sequence
+Requires:       ros-kilted-rmf-traffic
+Requires:       ros-kilted-rmf-traffic-ros2
+Requires:       ros-kilted-rmf-utils
+Requires:       ros-kilted-rmf-websocket
+Requires:       ros-kilted-std-msgs
+Requires:       ros-kilted-ros-workspace
+BuildRequires:  eigen3-devel
+BuildRequires:  json-devel
+BuildRequires:  ros-kilted-ament-cmake
+BuildRequires:  ros-kilted-backward-ros
+BuildRequires:  ros-kilted-nlohmann-json-schema-validator-vendor
+BuildRequires:  ros-kilted-rclcpp
+BuildRequires:  ros-kilted-rclcpp-action
+BuildRequires:  ros-kilted-rclcpp-components
+BuildRequires:  ros-kilted-rmf-api-msgs
+BuildRequires:  ros-kilted-rmf-battery
+BuildRequires:  ros-kilted-rmf-building-map-msgs
+BuildRequires:  ros-kilted-rmf-dispenser-msgs
+BuildRequires:  ros-kilted-rmf-door-msgs
+BuildRequires:  ros-kilted-rmf-fleet-msgs
+BuildRequires:  ros-kilted-rmf-ingestor-msgs
+BuildRequires:  ros-kilted-rmf-lift-msgs
+BuildRequires:  ros-kilted-rmf-reservation-msgs
+BuildRequires:  ros-kilted-rmf-task
+BuildRequires:  ros-kilted-rmf-task-msgs
+BuildRequires:  ros-kilted-rmf-task-ros2
+BuildRequires:  ros-kilted-rmf-task-sequence
+BuildRequires:  ros-kilted-rmf-traffic
+BuildRequires:  ros-kilted-rmf-traffic-ros2
+BuildRequires:  ros-kilted-rmf-utils
+BuildRequires:  ros-kilted-rmf-websocket
+BuildRequires:  ros-kilted-std-msgs
+BuildRequires:  yaml-cpp-devel
+BuildRequires:  ros-kilted-ros-workspace
+Provides:       %{name}-devel = %{version}-%{release}
+Provides:       %{name}-doc = %{version}-%{release}
+Provides:       %{name}-runtime = %{version}-%{release}
+
+%if 0%{?with_tests}
+BuildRequires:  ros-kilted-ament-cmake-catch2
+BuildRequires:  ros-kilted-ament-cmake-uncrustify
+%endif
+
+%description
+Fleet Adapter package for RMF fleets.
+
+%prep
+%autosetup -p1
+
+%build
+# In case we're installing to a non-standard location, look for a setup.sh
+# in the install tree and source it.  It will set things like
+# CMAKE_PREFIX_PATH, PKG_CONFIG_PATH, and PYTHONPATH.
+if [ -f "/opt/ros/kilted/setup.sh" ]; then . "/opt/ros/kilted/setup.sh"; fi
+mkdir -p .obj-%{_target_platform} && cd .obj-%{_target_platform}
+%cmake3 \
+    -UINCLUDE_INSTALL_DIR \
+    -ULIB_INSTALL_DIR \
+    -USYSCONF_INSTALL_DIR \
+    -USHARE_INSTALL_PREFIX \
+    -ULIB_SUFFIX \
+    -DCMAKE_INSTALL_PREFIX="/opt/ros/kilted" \
+    -DAMENT_PREFIX_PATH="/opt/ros/kilted" \
+    -DCMAKE_PREFIX_PATH="/opt/ros/kilted" \
+    -DSETUPTOOLS_DEB_LAYOUT=OFF \
+%if !0%{?with_tests}
+    -DBUILD_TESTING=OFF \
+%endif
+    ..
+
+%make_build
+
+%install
+# In case we're installing to a non-standard location, look for a setup.sh
+# in the install tree and source it.  It will set things like
+# CMAKE_PREFIX_PATH, PKG_CONFIG_PATH, and PYTHONPATH.
+if [ -f "/opt/ros/kilted/setup.sh" ]; then . "/opt/ros/kilted/setup.sh"; fi
+%make_install -C .obj-%{_target_platform}
+
+%if 0%{?with_tests}
+%check
+# Look for a Makefile target with a name indicating that it runs tests
+TEST_TARGET=$(%__make -qp -C .obj-%{_target_platform} | sed "s/^\(test\|check\):.*/\\1/;t f;d;:f;q0")
+if [ -n "$TEST_TARGET" ]; then
+# In case we're installing to a non-standard location, look for a setup.sh
+# in the install tree and source it.  It will set things like
+# CMAKE_PREFIX_PATH, PKG_CONFIG_PATH, and PYTHONPATH.
+if [ -f "/opt/ros/kilted/setup.sh" ]; then . "/opt/ros/kilted/setup.sh"; fi
+CTEST_OUTPUT_ON_FAILURE=1 \
+    %make_build -C .obj-%{_target_platform} $TEST_TARGET || echo "RPM TESTS FAILED"
+else echo "RPM TESTS SKIPPED"; fi
+%endif
+
+%files
+/opt/ros/kilted
+
+%changelog
+* Tue May 20 2025 Grey <grey@openrobotics.org> - 2.10.1-1
+- Autogenerated by Bloom
+
+* Tue Jun 11 2024 Grey <grey@openrobotics.org> - 2.7.1-1
+- Autogenerated by Bloom
+
+* Sun Jun 09 2024 Grey <grey@openrobotics.org> - 2.7.0-1
+- Autogenerated by Bloom
+
+* Wed Mar 13 2024 Grey <grey@openrobotics.org> - 2.6.0-1
+- Autogenerated by Bloom
+
+* Fri Mar 08 2024 Grey <grey@openrobotics.org> - 2.5.0-2
+- Autogenerated by Bloom
+
+* Fri Dec 22 2023 Grey <grey@openrobotics.org> - 2.5.0-1
+- Autogenerated by Bloom
+
+* Tue Dec 19 2023 Grey <grey@openrobotics.org> - 2.4.0-1
+- Autogenerated by Bloom
+
+* Mon Aug 28 2023 Grey <grey@openrobotics.org> - 2.3.2-1
+- Autogenerated by Bloom
+
+* Thu Aug 10 2023 Grey <grey@openrobotics.org> - 2.3.1-1
+- Autogenerated by Bloom
+
+* Thu Jun 08 2023 Grey <grey@openrobotics.org> - 2.3.0-1
+- Autogenerated by Bloom
+
+* Sun May 21 2023 Grey <grey@openrobotics.org> - 2.1.5-1
+- Autogenerated by Bloom
+
+* Fri May 19 2023 Grey <grey@openrobotics.org> - 2.1.4-1
+- Autogenerated by Bloom
+
+* Wed Apr 26 2023 Grey <grey@openrobotics.org> - 2.1.3-1
+- Autogenerated by Bloom
+
+* Tue Mar 21 2023 Grey <grey@openrobotics.org> - 2.1.2-2
+- Autogenerated by Bloom
+
