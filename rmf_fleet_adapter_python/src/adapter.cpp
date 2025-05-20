@@ -631,7 +631,9 @@ PYBIND11_MODULE(rmf_adapter, m) {
     py::arg("category"),
     py::arg("consider"))
   .def("reassign_dispatched_tasks",
-    &agv::FleetUpdateHandle::reassign_dispatched_tasks);
+    &agv::FleetUpdateHandle::reassign_dispatched_tasks)
+  .def("set_planner_cache_reset_size",
+    &agv::FleetUpdateHandle::set_planner_cache_reset_size);
 
   // TASK REQUEST CONFIRMATION ===============================================
   auto m_fleet_update_handle = m.def_submodule("fleet_update_handle");
@@ -820,7 +822,8 @@ PYBIND11_MODULE(rmf_adapter, m) {
   .def("dispatch_task",
     &agv::test::MockAdapter::dispatch_task,
     py::arg("task_id"),
-    py::arg("request"))
+    py::arg("request"),
+    py::arg("dry_run") = true)
   .def("start", &agv::test::MockAdapter::start)
   .def("stop", &agv::test::MockAdapter::stop)
   .def("now", [&](agv::test::MockAdapter& self)

@@ -36,6 +36,7 @@
 #include "../events/GoToPlace.hpp"
 #include "../events/ResponsiveWait.hpp"
 #include "../events/PerformAction.hpp"
+#include "../events/DynamicEvent.hpp"
 
 #include <rmf_task/Constraints.hpp>
 #include <rmf_task/Parameters.hpp>
@@ -215,6 +216,10 @@ std::shared_ptr<rmf_task::Request> FleetUpdateHandle::Implementation::convert(
   if (!deserialized_task.description)
   {
     errors = deserialized_task.errors;
+    for (auto& e : errors)
+    {
+      e = make_error_str(6, "Unable to deserialize", e);
+    }
     return nullptr;
   }
 
@@ -544,7 +549,8 @@ void FleetUpdateHandle::Implementation::bid_notice_cb(
     *task_planner,
     node);
 
-  auto receive_allocation = [w = weak_self, respond, task_id](
+  auto receive_allocation =
+    [w = weak_self, respond, task_id, dry_run = bid_notice.dry_run](
     AllocateTasks::Result result)
     {
       const auto self = w.lock();
@@ -635,6 +641,12 @@ void FleetUpdateHandle::Implementation::bid_notice_cb(
         self->_pimpl->node->get_logger(),
         "Submitted BidProposal to accommodate task [%s] by robot [%s] with new cost [%f]",
         task_id.c_str(), robot_name->c_str(), cost);
+
+      // If the request is for a dry run, we do not store the assignments for
+      // dispatch.
+      if (dry_run) {
+        return;
+      }
 
       // Store assignments in internal map
       self->_pimpl->bid_notice_assignments.insert({task_id, assignments});
@@ -1385,22 +1397,46 @@ void FleetUpdateHandle::Implementation::update_fleet_logs() const
 
 //==============================================================================
 void FleetUpdateHandle::Implementation::handle_emergency(
-  const bool is_emergency)
+  const bool emergency_signal)
 {
-  if (is_emergency == emergency_active)
+  if (emergency_signal == emergency_active)
     return;
 
-  emergency_active = is_emergency;
-  if (is_emergency)
+  emergency_active = emergency_signal;
+  if (emergency_signal)
   {
     update_emergency_planner();
   }
 
   for (const auto& [context, _] : task_managers)
   {
-    context->_set_emergency(is_emergency);
+    context->_set_emergency(emergency_signal);
   }
-  emergency_publisher.get_subscriber().on_next(is_emergency);
+  emergency_publisher.get_subscriber().on_next(emergency_signal);
+}
+
+//==============================================================================
+void FleetUpdateHandle::Implementation::handle_target_emergency(
+  std::shared_ptr<rmf_fleet_msgs::msg::EmergencySignal> emergency_signal)
+{
+  bool execute = false;
+  if (emergency_signal->fleet_names.empty())
+  {
+    execute = true;
+  }
+
+  for (const auto& fleet_name : emergency_signal->fleet_names)
+  {
+    if (fleet_name == name)
+    {
+      execute = true;
+      break;
+    }
+  }
+
+  if (execute) {
+    handle_emergency(emergency_signal->is_emergency);
+  }
 }
 
 //==============================================================================
@@ -1568,7 +1604,7 @@ PlaceDeserializer make_place_deserializer(
   planner)
 {
   return [planner = std::move(planner)](const nlohmann::json& msg)
-    -> agv::DeserializedPlace
+    -> DeserializedPlace
     {
       std::optional<rmf_traffic::agv::Plan::Goal> place;
       const auto& graph = (*planner)->get_configuration().graph();
@@ -1621,7 +1657,9 @@ PlaceDeserializer make_place_deserializer(
       {
         const auto& ori_it = msg.find("orientation");
         if (ori_it != msg.end())
+        {
           place->orientation(ori_it->get<double>());
+        }
       }
 
       return {place, {}};
@@ -1676,6 +1714,8 @@ void FleetUpdateHandle::Implementation::add_standard_tasks()
     deserialization,
     activation,
     node->clock());
+
+  events::DynamicEvent::add(deserialization, activation.event);
 }
 
 //==============================================================================
@@ -2550,6 +2590,22 @@ void FleetUpdateHandle::reassign_dispatched_tasks()
       if (!self)
         return;
       self->_pimpl->reassign_dispatched_tasks([]() {}, [](auto) {});
+    }
+  );
+}
+
+//==============================================================================
+void FleetUpdateHandle::set_planner_cache_reset_size(
+  std::optional<std::size_t> max_size)
+{
+  _pimpl->worker.schedule(
+    [w = weak_from_this(), max_size](const auto&)
+    {
+      const auto self = w.lock();
+      if (!self)
+        return;
+
+      self->_pimpl->planner_cache_reset_size = max_size;
     }
   );
 }
