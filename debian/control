@@ -1,0 +1,12 @@
+Source: ros-kilted-rmf-fleet-adapter-python
+Section: misc
+Priority: optional
+Maintainer: methylDragon <methylDragon@gmail.com>
+Build-Depends: debhelper (>= 9.0.0), ros-kilted-ament-cmake-pytest <!nocheck>, ros-kilted-pybind11-json-vendor, ros-kilted-pybind11-vendor, ros-kilted-rclpy, ros-kilted-rmf-fleet-adapter, ros-kilted-ros-workspace
+Homepage: 
+Standards-Version: 3.9.2
+
+Package: ros-kilted-rmf-fleet-adapter-python
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-kilted-pybind11-json-vendor, ros-kilted-pybind11-vendor, ros-kilted-rclpy, ros-kilted-rmf-fleet-adapter, ros-kilted-ros-workspace
+Description: Python bindings for the rmf_fleet_adapter
