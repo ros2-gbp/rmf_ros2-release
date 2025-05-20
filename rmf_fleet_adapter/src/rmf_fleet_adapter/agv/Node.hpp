@@ -45,13 +45,21 @@
 #include <rmf_fleet_msgs/msg/fleet_state.hpp>
 #include <rmf_fleet_msgs/msg/mutex_group_request.hpp>
 #include <rmf_fleet_msgs/msg/mutex_group_states.hpp>
+#include <rmf_fleet_msgs/msg/emergency_signal.hpp>
 
 #include <rmf_task_msgs/msg/api_request.hpp>
 #include <rmf_task_msgs/msg/api_response.hpp>
+#include <rmf_task_msgs/msg/dynamic_event_description.hpp>
 
 #include <rmf_traffic/Time.hpp>
 
 namespace rmf_fleet_adapter {
+
+using DynamicEventDescription = rmf_task_msgs::msg::DynamicEventDescription;
+using DynamicEventDescriptionPub =
+  rclcpp::Publisher<DynamicEventDescription>::SharedPtr;
+
+
 namespace agv {
 
 //==============================================================================
@@ -107,6 +115,10 @@ public:
   using EmergencyNotice = std_msgs::msg::Bool;
   using EmergencyNoticeObs = rxcpp::observable<EmergencyNotice::SharedPtr>;
   const EmergencyNoticeObs& emergency_notice() const;
+
+  using TargetEmergencyNotice = rmf_fleet_msgs::msg::EmergencySignal;
+  using TargetEmergencyNoticeObs = rxcpp::observable<TargetEmergencyNotice::SharedPtr>;
+  const TargetEmergencyNoticeObs& target_emergency_notice() const;
 
   using IngestorRequest = rmf_ingestor_msgs::msg::IngestorRequest;
   using IngestorRequestPub = rclcpp::Publisher<IngestorRequest>::SharedPtr;
@@ -166,10 +178,7 @@ public:
     rclcpp::Publisher<ReservationRelease>::SharedPtr;
   const ReservationReleasePub& release_location() const;
 
-  using ReservationCancel = rmf_reservation_msgs::msg::ReleaseRequest;
-  using ReservationCancelPub =
-    rclcpp::Publisher<ReservationCancel>::SharedPtr;
-  const ReservationCancelPub& cancel_reservation() const;
+ const DynamicEventDescriptionPub& all_dynamic_event_descriptions() const;
 
 
   template<typename DurationRepT, typename DurationT, typename CallbackT>
@@ -223,6 +232,7 @@ private:
   Bridge<DispenserResult> _dispenser_result_obs;
   Bridge<DispenserState> _dispenser_state_obs;
   Bridge<EmergencyNotice> _emergency_notice_obs;
+  Bridge<TargetEmergencyNotice> _target_emergency_notice_obs;
   IngestorRequestPub _ingestor_request_pub;
   Bridge<IngestorResult> _ingestor_result_obs;
   Bridge<IngestorState> _ingestor_state_obs;
@@ -237,7 +247,7 @@ private:
   ReservationClaimPub _reservation_claim_pub;
   Bridge<ReservationAllocation> _reservation_alloc_obs;
   ReservationReleasePub _reservation_release_pub;
-  ReservationCancelPub _reservation_cancel_pub;
+  DynamicEventDescriptionPub _general_dynamic_event_description_pub;
 };
 
 } // namespace agv
