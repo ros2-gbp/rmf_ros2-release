@@ -32,16 +32,13 @@
 #include <rmf_task/requests/Clean.hpp>
 #include <rmf_task/BinaryPriorityScheme.hpp>
 
-#include <rmf_task_sequence/Task.hpp>
-#include <rmf_task_sequence/Phase.hpp>
-#include <rmf_task_sequence/Event.hpp>
-#include <rmf_task_sequence/events/PerformAction.hpp>
-
 #include <rmf_building_map_msgs/msg/graph.hpp>
 
 #include <rmf_fleet_msgs/msg/dock_summary.hpp>
 #include <rmf_fleet_msgs/msg/lane_states.hpp>
 #include <rmf_fleet_msgs/msg/charging_assignments.hpp>
+#include <rmf_fleet_msgs/msg/emergency_signal.hpp>
+#include <std_msgs/msg/bool.hpp>
 
 #include <rmf_fleet_adapter/agv/FleetUpdateHandle.hpp>
 #include <rmf_fleet_adapter/StandardNames.hpp>
@@ -49,7 +46,6 @@
 #include "Node.hpp"
 #include "RobotContext.hpp"
 #include "../TaskManager.hpp"
-#include "../DeserializeJSON.hpp"
 #include <rmf_websocket/BroadcastClient.hpp>
 
 #include <rmf_traffic/schedule/Mirror.hpp>
@@ -89,38 +85,6 @@ struct TaskActivation
   rmf_task_sequence::Phase::ActivatorPtr phase;
   rmf_task_sequence::Event::InitializerPtr event;
 };
-
-//==============================================================================
-template<typename T>
-struct DeserializedDescription
-{
-  T description;
-  std::vector<std::string> errors;
-};
-
-//==============================================================================
-using DeserializedTask =
-  DeserializedDescription<std::shared_ptr<const rmf_task::Task::Description>>;
-
-//==============================================================================
-using TaskDescriptionDeserializer =
-  std::function<DeserializedTask(const nlohmann::json&)>;
-
-//==============================================================================
-using DeserializedPhase =
-  DeserializedDescription<
-  std::shared_ptr<const rmf_task_sequence::Phase::Description>
-  >;
-
-//==============================================================================
-using PhaseDescriptionDeserializer =
-  std::function<DeserializedPhase(const nlohmann::json&)>;
-
-//==============================================================================
-using DeserializedEvent =
-  DeserializedDescription<
-  std::shared_ptr<const rmf_task_sequence::Event::Description>
-  >;
 
 //==============================================================================
 using EventDescriptionDeserializer =
@@ -317,6 +281,7 @@ public:
   rclcpp::TimerBase::SharedPtr memory_trim_timer = nullptr;
 
   rxcpp::subscription emergency_sub;
+  rxcpp::subscription target_emergency_sub;
   rxcpp::subjects::subject<bool> emergency_publisher;
   rxcpp::observable<bool> emergency_obs;
   bool emergency_active = false;
@@ -389,6 +354,9 @@ public:
   std::shared_ptr<AllocateTasks> calculate_bid;
   rmf_rxcpp::subscription_guard calculate_bid_subscription;
 
+  rclcpp::TimerBase::SharedPtr memory_utilization_timer;
+  std::optional<std::size_t> planner_cache_reset_size;
+
   template<typename... Args>
   static std::shared_ptr<FleetUpdateHandle> make(Args&&... args)
   {
@@ -410,9 +378,23 @@ public:
       {
         if (const auto self = w.lock())
         {
+          RCLCPP_WARN_ONCE(
+            self->_pimpl->node->get_logger(),
+            "This topic is getting deprecated soon. Please use the topic 'emergency_signal instead.");
           self->_pimpl->handle_emergency(msg->data);
         }
       });
+    handle->_pimpl->target_emergency_sub = handle->_pimpl->node->target_emergency_notice()
+      .observe_on(rxcpp::identity_same_worker(handle->_pimpl->worker))
+      .subscribe(
+      [w = handle->weak_from_this()](const auto& msg)
+      {
+        if (const auto self = w.lock())
+        {
+          self->_pimpl->handle_target_emergency(msg);
+        }
+      });
+
     handle->_pimpl->emergency_planner =
       std::make_shared<std::shared_ptr<const rmf_traffic::agv::Planner>>(nullptr);
 
@@ -637,6 +619,38 @@ public:
     handle->_pimpl->deserialization.event->add(
       "perform_action", validator, deserializer);
 
+    handle->_pimpl->memory_utilization_timer =
+      handle->_pimpl->node->create_wall_timer(
+        std::chrono::minutes(5), [w = handle->weak_from_this()]()
+        {
+          const auto self = w.lock();
+          if (!self)
+            return;
+
+          const auto& planner = *self->_pimpl->planner;
+          const auto audit = planner->cache_audit();
+          std::stringstream ss;
+          ss << audit;
+          RCLCPP_INFO(
+            self->_pimpl->node->get_logger(),
+            "%s",
+            ss.str().c_str());
+
+          const std::optional<std::size_t> reset_size =
+            self->_pimpl->planner_cache_reset_size;
+          if (reset_size.has_value())
+          {
+            if (audit.differential_drive_planner_cache_size() > *reset_size)
+            {
+              RCLCPP_INFO(
+                self->_pimpl->node->get_logger(),
+                "Reseting planner cache since it exceeded size limit of %zu",
+                *reset_size);
+              planner->clear_differential_drive_cache();
+            }
+          }
+        });
+
     return handle;
   }
 
@@ -686,7 +700,8 @@ public:
 
   void update_fleet_state() const;
   void update_fleet_logs() const;
-  void handle_emergency(bool is_emergency);
+  void handle_emergency(const bool is_emergency);
+  void handle_target_emergency(std::shared_ptr<rmf_fleet_msgs::msg::EmergencySignal> is_emergency);
   void update_emergency_planner();
 
   void update_charging_assignments(const ChargingAssignments& assignments);
