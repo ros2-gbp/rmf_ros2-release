@@ -2,6 +2,16 @@
 Changelog for package rmf_traffic_ros2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.11.1 (2025-07-21)
+-------------------
+* Remove deprecated Pose2D message (`#450 <https://github.com/open-rmf/rmf_ros2/issues/450>`_)
+* Contributors: Luca Della Vedova
+
+2.11.0 (2025-06-09)
+-------------------
+* Adding mutex parameters to navgraph (`#436 <https://github.com/open-rmf/rmf_ros2/issues/436>`_)
+* Contributors: Jun
+
 2.10.1 (2025-05-13)
 -------------------
 
