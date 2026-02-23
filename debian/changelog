@@ -1,0 +1,140 @@
+ros-rolling-rmf-reservation-node (2.12.0-1bookworm) bookworm; urgency=high
+
+  * Accurate GoToPlace task update and reservation fixes (#498 <https://github.com/open-rmf/rmf_ros2/issues/498>)
+  * Makes sure that the reservation system always assigns nearest goal during Emergency Pullover (#484 <https://github.com/open-rmf/rmf_ros2/issues/484>)
+  * Contributors: Arjo Chakravarty, Xiyu
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Sun, 22 Feb 2026 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.11.1-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Sun, 20 Jul 2025 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.11.0-1bookworm) bookworm; urgency=high
+
+  * Migrate reservation node to target_link_libraries (#437 <https://github.com/open-rmf/rmf_ros2/issues/437>)
+  * Remove unused variable (#435 <https://github.com/open-rmf/rmf_ros2/issues/435>)
+    Minnor code quality issue.
+  * Contributors: Arjo Chakravarty, Luca Della Vedova
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Sun, 08 Jun 2025 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.10.1-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Mon, 12 May 2025 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.10.0-1bookworm) bookworm; urgency=high
+
+  * Completely Excise Reservation Cancellation pathways (#416 <https://github.com/open-rmf/rmf_ros2/issues/416>)
+  * Contributors: Arjo Chakravarty
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Thu, 08 May 2025 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.9.0-1bookworm) bookworm; urgency=high
+
+  * Adds a simple parking spot management system.  (#325 <https://github.com/open-rmf/rmf_ros2/issues/325>)
+  * Contributors: Arjo Chakravarty
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Tue, 26 Nov 2024 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.8.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Tue, 11 Jun 2024 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.7.1-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Sun, 09 Jun 2024 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.7.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Fri, 07 Jun 2024 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.6.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Tue, 12 Mar 2024 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.5.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Thu, 21 Dec 2023 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.4.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Thu, 14 Dec 2023 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.3.2-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Sun, 27 Aug 2023 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.3.1-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Wed, 09 Aug 2023 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.3.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Tue, 06 Jun 2023 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.2.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Mon, 05 Jun 2023 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.1.5-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Fri, 19 May 2023 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.1.4-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Mon, 01 May 2023 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.1.3-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Tue, 25 Apr 2023 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (2.0.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Thu, 28 Apr 2022 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (1.5.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Mon, 14 Mar 2022 16:00:00 -0000
+
+ros-rolling-rmf-reservation-node (1.4.0-1bookworm) bookworm; urgency=high
+
+
+
+ -- Arjo Chakravarty <arjoc@intrinsic.ai>  Wed, 01 Sep 2021 16:00:00 -0000
+
+
