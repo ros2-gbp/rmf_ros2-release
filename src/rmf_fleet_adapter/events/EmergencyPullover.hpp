@@ -108,6 +108,8 @@ public:
       rmf_traffic::agv::Plan plan,
       rmf_traffic::schedule::Itinerary full_itinerary);
 
+    void _stop_and_clear();
+
     Negotiator::NegotiatePtr _respond(
       const Negotiator::TableViewerPtr& table_view,
       const Negotiator::ResponderPtr& responder);
@@ -121,6 +123,7 @@ public:
     std::optional<ExecutePlan> _execution;
     std::shared_ptr<services::FindEmergencyPullover> _find_pullover_service;
     rmf_rxcpp::subscription_guard _pullover_subscription;
+    rmf_rxcpp::subscription_guard _replan_request_subscription;
     rclcpp::TimerBase::SharedPtr _find_pullover_timeout;
     rclcpp::TimerBase::SharedPtr _retry_timer;
 
