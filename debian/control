@@ -1,0 +1,12 @@
+Source: ros-lyrical-rmf-task-ros2
+Section: misc
+Priority: optional
+Maintainer: Yadunund <yadunund@openrobotics.org>
+Build-Depends: debhelper (>= 9.0.0), libeigen3-dev, nlohmann-json3-dev, ros-lyrical-ament-cmake, ros-lyrical-ament-cmake-catch2 <!nocheck>, ros-lyrical-ament-cmake-uncrustify <!nocheck>, ros-lyrical-backward-ros, ros-lyrical-nlohmann-json-schema-validator-vendor, ros-lyrical-rclcpp, ros-lyrical-rmf-api-msgs, ros-lyrical-rmf-task-msgs, ros-lyrical-rmf-traffic, ros-lyrical-rmf-traffic-ros2, ros-lyrical-rmf-utils, ros-lyrical-rmf-websocket, ros-lyrical-std-msgs, ros-lyrical-ros-workspace
+Homepage: https://index.ros.org/p/rmf_task_ros2/#lyrical
+Standards-Version: 3.9.2
+
+Package: ros-lyrical-rmf-task-ros2
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, nlohmann-json3-dev, ros-lyrical-backward-ros, ros-lyrical-nlohmann-json-schema-validator-vendor, ros-lyrical-rclcpp, ros-lyrical-rmf-api-msgs, ros-lyrical-rmf-task-msgs, ros-lyrical-rmf-traffic, ros-lyrical-rmf-traffic-ros2, ros-lyrical-rmf-utils, ros-lyrical-rmf-websocket, ros-lyrical-std-msgs, ros-lyrical-ros-workspace
+Description: A package managing the dispatching of tasks in RMF system.
