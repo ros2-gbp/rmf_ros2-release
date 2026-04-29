@@ -1,0 +1,12 @@
+Source: ros-lyrical-rmf-fleet-adapter
+Section: misc
+Priority: optional
+Maintainer: Grey <grey@openrobotics.org>
+Build-Depends: debhelper (>= 9.0.0), libeigen3-dev, libyaml-cpp-dev, nlohmann-json3-dev, ros-lyrical-ament-cmake, ros-lyrical-ament-cmake-catch2 <!nocheck>, ros-lyrical-ament-cmake-uncrustify <!nocheck>, ros-lyrical-backward-ros, ros-lyrical-nlohmann-json-schema-validator-vendor, ros-lyrical-rclcpp, ros-lyrical-rclcpp-action, ros-lyrical-rclcpp-components, ros-lyrical-rmf-api-msgs, ros-lyrical-rmf-battery, ros-lyrical-rmf-building-map-msgs, ros-lyrical-rmf-dispenser-msgs, ros-lyrical-rmf-door-msgs, ros-lyrical-rmf-fleet-msgs, ros-lyrical-rmf-ingestor-msgs, ros-lyrical-rmf-lift-msgs, ros-lyrical-rmf-reservation-msgs, ros-lyrical-rmf-task, ros-lyrical-rmf-task-msgs, ros-lyrical-rmf-task-ros2, ros-lyrical-rmf-task-sequence, ros-lyrical-rmf-traffic, ros-lyrical-rmf-traffic-ros2, ros-lyrical-rmf-utils, ros-lyrical-rmf-websocket, ros-lyrical-std-msgs, ros-lyrical-ros-workspace
+Homepage: https://index.ros.org/p/rmf_fleet_adapter/#lyrical
+Standards-Version: 3.9.2
+
+Package: ros-lyrical-rmf-fleet-adapter
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, nlohmann-json3-dev, ros-lyrical-backward-ros, ros-lyrical-nlohmann-json-schema-validator-vendor, ros-lyrical-rclcpp, ros-lyrical-rclcpp-action, ros-lyrical-rclcpp-components, ros-lyrical-rmf-api-msgs, ros-lyrical-rmf-battery, ros-lyrical-rmf-building-map-msgs, ros-lyrical-rmf-dispenser-msgs, ros-lyrical-rmf-door-msgs, ros-lyrical-rmf-fleet-msgs, ros-lyrical-rmf-ingestor-msgs, ros-lyrical-rmf-lift-msgs, ros-lyrical-rmf-reservation-msgs, ros-lyrical-rmf-task, ros-lyrical-rmf-task-msgs, ros-lyrical-rmf-task-ros2, ros-lyrical-rmf-task-sequence, ros-lyrical-rmf-traffic, ros-lyrical-rmf-traffic-ros2, ros-lyrical-rmf-utils, ros-lyrical-rmf-websocket, ros-lyrical-std-msgs, ros-lyrical-ros-workspace
+Description: Fleet Adapter package for RMF fleets.
