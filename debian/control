@@ -1,0 +1,12 @@
+Source: ros-lyrical-rmf-traffic-ros2
+Section: misc
+Priority: optional
+Maintainer: Grey <grey@openrobotics.org>
+Build-Depends: debhelper (>= 9.0.0), libeigen3-dev, libproj-dev, libyaml-cpp-dev, nlohmann-json3-dev, ros-lyrical-ament-cmake, ros-lyrical-ament-cmake-catch2 <!nocheck>, ros-lyrical-ament-cmake-uncrustify <!nocheck>, ros-lyrical-backward-ros, ros-lyrical-rclcpp, ros-lyrical-rmf-building-map-msgs, ros-lyrical-rmf-fleet-msgs, ros-lyrical-rmf-reservation-msgs, ros-lyrical-rmf-site-map-msgs, ros-lyrical-rmf-traffic, ros-lyrical-rmf-traffic-msgs, ros-lyrical-rmf-utils, uuid-dev, zlib1g-dev, ros-lyrical-ros-workspace
+Homepage: https://index.ros.org/p/rmf_traffic_ros2/#lyrical
+Standards-Version: 3.9.2
+
+Package: ros-lyrical-rmf-traffic-ros2
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libproj-dev, libyaml-cpp-dev, nlohmann-json3-dev, ros-lyrical-backward-ros, ros-lyrical-rclcpp, ros-lyrical-rmf-building-map-msgs, ros-lyrical-rmf-fleet-msgs, ros-lyrical-rmf-reservation-msgs, ros-lyrical-rmf-site-map-msgs, ros-lyrical-rmf-traffic, ros-lyrical-rmf-traffic-msgs, ros-lyrical-rmf-utils, uuid-dev, zlib1g-dev, ros-lyrical-ros-workspace
+Description: A package containing messages used by the RMF traffic management system.
