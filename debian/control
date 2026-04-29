@@ -1,0 +1,12 @@
+Source: ros-lyrical-rmf-reservation-node
+Section: misc
+Priority: optional
+Maintainer: Arjo Chakravarty <arjoc@intrinsic.ai>
+Build-Depends: debhelper (>= 9.0.0), ros-lyrical-ament-cmake, ros-lyrical-ament-lint-auto <!nocheck>, ros-lyrical-ament-lint-common <!nocheck>, ros-lyrical-rmf-building-map-msgs, ros-lyrical-rmf-fleet-adapter, ros-lyrical-rmf-reservation-msgs, ros-lyrical-ros-workspace
+Homepage: https://index.ros.org/p/rmf_reservation_node/#lyrical
+Standards-Version: 3.9.2
+
+Package: ros-lyrical-rmf-reservation-node
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-lyrical-rmf-building-map-msgs, ros-lyrical-rmf-fleet-adapter, ros-lyrical-rmf-reservation-msgs, ros-lyrical-ros-workspace
+Description: Node that handles current state of parking spots.
