@@ -408,7 +408,7 @@ public:
       {
         RCLCPP_ERROR(
           node->get_logger(),
-          "[AllocateTasks] Unable to find a robot associated with index [%d]",
+          "[AllocateTasks] Unable to find a robot associated with index [%zu]",
           i);
         continue;
       }
@@ -922,7 +922,7 @@ double FleetUpdateHandle::Implementation::compute_cost(
 {
   rmf_task::TaskPlanner::Assignments raw_assignments;
   raw_assignments.reserve(assignments.size());
-  for (const auto [_, queue] : assignments)
+  for (const auto& [_, queue] : assignments)
   {
     raw_assignments.push_back(queue);
   }
@@ -1137,7 +1137,8 @@ namespace {
 std::optional<rmf_fleet_msgs::msg::Location> convert_location(
   const agv::RobotContext& context)
 {
-  if (context.location().empty())
+  const auto location = context.location();
+  if (location.empty())
   {
     const auto& lost = context.lost();
     if (lost.has_value() && lost->location.has_value())
@@ -1161,7 +1162,7 @@ std::optional<rmf_fleet_msgs::msg::Location> convert_location(
   }
 
   const auto& graph = context.planner()->get_configuration().graph();
-  const auto& l = context.location().front();
+  const auto l = location.front();
   const auto& wp = graph.get_waypoint(l.waypoint());
   const Eigen::Vector2d p = l.location().value_or(wp.get_location());
 
@@ -1451,7 +1452,7 @@ public:
   void execute(const LiftSessionEnd&) override {}
   void execute(const LiftMove&) override {}
   void execute(const Wait&) override {}
-  void execute(const Dock& dock) override {}
+  void execute(const Dock& /*dock*/) override {}
   void execute(const LiftSessionBegin& info) override
   {
     lift = info.lift_name();
@@ -1485,8 +1486,6 @@ std::vector<std::size_t> find_emergency_lift_closures(
     if (const auto* event = lane.exit().event())
       event->execute(executor);
 
-    const auto wp0 = lane.entry().waypoint_index();
-    const auto wp1 = lane.exit().waypoint_index();
     if (executor.enter)
     {
       if (emergency_level_for_lift.count(executor.lift) > 0)
@@ -2569,7 +2568,7 @@ FleetUpdateHandle::retreat_to_charger_interval() const
 
 //==============================================================================
 FleetUpdateHandle& FleetUpdateHandle::set_retreat_to_charger_interval(
-  std::optional<rmf_traffic::Duration> duration)
+  std::optional<rmf_traffic::Duration> /*duration*/)
 {
   RCLCPP_WARN(
     _pimpl->node->get_logger(),
