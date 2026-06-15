@@ -1,3 +1,33 @@
+## rmf_ros2 (lyrical) - 2.13.0-1
+
+The packages in the `rmf_ros2` repository were released into the `lyrical` distro by running `/usr/bin/bloom-release --rosdistro lyrical rmf_ros2` on `Mon, 15 Jun 2026 14:03:57 -0000`
+
+These packages were released:
+- `rmf_charging_schedule`
+- `rmf_fleet_adapter`
+- `rmf_fleet_adapter_python`
+- `rmf_reservation_node`
+- `rmf_task_ros2`
+- `rmf_traffic_ros2`
+- `rmf_websocket`
+
+Version of package(s) in repository `rmf_ros2`:
+
+- upstream repository: https://github.com/open-rmf/rmf_ros2.git
+- release repository: https://github.com/ros2-gbp/rmf_ros2-release.git
+- rosdistro version: `2.12.0-3`
+- old version: `2.12.0-3`
+- new version: `2.13.0-1`
+
+Versions of tools used:
+
+- bloom version: `0.14.3`
+- catkin_pkg version: `1.0.0`
+- rosdep version: `0.26.0`
+- rosdistro version: `1.0.1`
+- vcstools version: `0.1.42`
+
+
 ## rmf_ros2 (rolling) - 2.12.0-1
 
 The packages in the `rmf_ros2` repository were released into the `rolling` distro by running `/usr/bin/bloom-release rmf_ros2 --ros-distro rolling` on `Mon, 23 Feb 2026 03:49:59 -0000`
