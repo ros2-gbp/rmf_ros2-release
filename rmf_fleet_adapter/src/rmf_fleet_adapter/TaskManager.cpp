@@ -288,6 +288,14 @@ const std::string& TaskManager::ActiveTask::id() const
   return _task->tag()->booking()->id();
 }
 
+//==============================================================================
+rmf_traffic::Duration TaskManager::ActiveTask::estimate_remaining_time() const
+{
+  if (!_task)
+    return rmf_traffic::Duration(0);
+  return _task->estimate_remaining_time();
+}
+
 namespace {
 
 //==============================================================================
@@ -856,6 +864,20 @@ auto TaskManager::expected_finish_state() const -> State
   if (!_direct_queue.empty())
   {
     rmf_task::State return_state = _direct_queue.rbegin()->assignment.finish_state();
+    if (_active_task && return_state.time().has_value())
+    {
+      // Shift the last queued direct task's finish time forward by the current active
+      // task's accumulated delay.
+      const auto projected_active_end =
+        _context->now() + _active_task.estimate_remaining_time();
+      const auto planned_active_end = _context->current_task_end_state().time();
+      if (planned_active_end.has_value()
+        && projected_active_end > *planned_active_end)
+      {
+        const auto shift = projected_active_end - *planned_active_end;
+        return_state.time(*return_state.time() + shift);
+      }
+    }
     return_state.idle(false);
     return return_state;
   }
@@ -863,6 +885,8 @@ auto TaskManager::expected_finish_state() const -> State
   if (_active_task)
   {
     rmf_task::State return_state = _context->current_task_end_state();
+    const auto t = _context->now() + _active_task.estimate_remaining_time();
+    return_state.time(t);
     return_state.idle(false);
     return return_state;
   }
@@ -871,7 +895,7 @@ auto TaskManager::expected_finish_state() const -> State
     _context->make_get_state()()
     .time(rmf_traffic_ros2::convert(_context->node()->now()))
     .idle(true);
-    
+
   return current_state;
 }
 
@@ -1893,7 +1917,8 @@ void TaskManager::_begin_waiting()
     return;
   }
 
-  if (_context->location().empty())
+  const auto location = _context->location();
+  if (location.empty())
   {
     RCLCPP_WARN(
       _context->node()->get_logger(),
@@ -1904,10 +1929,10 @@ void TaskManager::_begin_waiting()
   }
 
   // Determine the waypoint closest to the robot
-  std::size_t waiting_point = _context->location().front().waypoint();
+  std::size_t waiting_point = location.front().waypoint();
   double min_dist = std::numeric_limits<double>::max();
   const auto& robot_position = _context->position();
-  for (const auto& start : _context->location())
+  for (const auto& start : location)
   {
     const auto waypoint = start.waypoint();
     const auto& waypoint_location =
@@ -2035,6 +2060,23 @@ std::function<void()> TaskManager::_make_resume_from_waiting()
 //==============================================================================
 bool TaskManager::consider_retreating_to_charger()
 {
+  if (_idle_task)
+  {
+    // If the robot's idle behavior is charging, but it has been decommissioned
+    // from performing its idle behavior, we should not retreat to the charger.
+    const auto request = _idle_task->make_request(_context->make_get_state()());
+    const auto& booking_labels = request->booking()->labels();
+    const auto it =
+      std::find(booking_labels.begin(), booking_labels.end(), "charge");
+    if (it != booking_labels.end())
+    {
+      if (!_context->commission().is_performing_idle_behavior())
+      {
+        return false;
+      }
+    }
+  }
+
   if (!_travel_estimator)
   {
     return false;
