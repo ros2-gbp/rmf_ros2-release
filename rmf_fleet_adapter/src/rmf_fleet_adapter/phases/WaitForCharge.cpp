@@ -100,7 +100,7 @@ WaitForCharge::Active::Active(
   const auto& graph = _context->navigation_graph();
   retain_mutexes.insert(
     graph.get_waypoint(charging_waypoint).in_mutex_group());
-  _context->retain_mutex_groups(retain_mutexes);
+  _context->retain_mutex_groups(retain_mutexes, "wait for charge");
 
   if (retain_mutexes.begin()->empty())
   {
@@ -122,11 +122,11 @@ _reservation_client = std::move(reservation::ReservationNodeNegotiator::make(
           _context,
           std::vector<rmf_traffic::agv::Plan::Goal>{ charging_waypoint},
           true,
-          [](const rmf_traffic::agv::Plan::Goal& goal)
+          [](const rmf_traffic::agv::Plan::Goal& /*goal*/)
           {
             // Do Nothing
           },
-          [](const rmf_traffic::agv::Plan::Goal& goal)
+          [](const rmf_traffic::agv::Plan::Goal& /*goal*/)
           {
             // Do Nothing
           }
