@@ -1,0 +1,12 @@
+Source: ros-lyrical-rmf-fleet-adapter-python
+Section: misc
+Priority: optional
+Maintainer: "methylDragon" <methylDragon@gmail.com>
+Build-Depends: debhelper (>= 9.0.0), ros-lyrical-ament-cmake-pytest <!nocheck>, ros-lyrical-pybind11-json-vendor, ros-lyrical-pybind11-vendor, ros-lyrical-rclpy, ros-lyrical-rmf-fleet-adapter, ros-lyrical-ros-workspace
+Homepage: https://index.ros.org/p/rmf_fleet_adapter_python/#lyrical
+Standards-Version: 3.9.2
+
+Package: ros-lyrical-rmf-fleet-adapter-python
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-lyrical-pybind11-json-vendor, ros-lyrical-pybind11-vendor, ros-lyrical-rclpy, ros-lyrical-rmf-fleet-adapter, ros-lyrical-ros-workspace
+Description: Python bindings for the rmf_fleet_adapter
