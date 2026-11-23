@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.20)
 project(rmf_fleet_adapter_python)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
@@ -48,11 +48,11 @@ add_compile_definitions(BUILT_AGAINST_NUMPY_VERSION="${NUMPY_VERSION_STRING}")
 
 include_directories(
   include
-  ${rmf_fleet_adapter_INCLUDE_DIRS}
 )
 
 find_package(pybind11 REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(pybind11_json_vendor REQUIRED)
 find_package(pybind11_json REQUIRED)
 
 pybind11_add_module(rmf_adapter SHARED
@@ -71,23 +71,17 @@ pybind11_add_module(rmf_adapter SHARED
 
 target_link_libraries(rmf_adapter PRIVATE
   rmf_fleet_adapter::rmf_fleet_adapter
+  rmf_task::rmf_task
+  rmf_battery::rmf_battery
+  ${rmf_task_msgs_TARGETS}
   nlohmann_json::nlohmann_json
-  pybind11_json)
+  pybind11_json
+)
 
 target_include_directories(rmf_adapter
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-    ${rmf_traffic_INCLUDE_DIRS}
-    ${rmf_traffic_ros2_INCLUDE_DIRS}
-    ${rmf_battery_INCLUDE_DIRS}
-    ${rmf_task_INCLUDE_DIRS}
-    ${rmf_fleet_msgs_INCLUDE_DIRS}
-    ${rclcpp_INCLUDE_DIRS}
-  PRIVATE
-    ${rmf_task_msgs_INCLUDE_DIRS}
-    ${rmf_door_msgs_INCLUDE_DIRS}
-    ${rmf_lift_msgs_INCLUDE_DIRS}
 )
 
 # Locate ament_package template files.
@@ -119,6 +113,7 @@ if(BUILD_TESTING)
   set(_rmf_fleet_adapter_python_tests
     tests/unit/test_geometry.py
     tests/unit/test_graph.py
+    tests/unit/test_property_setters.py
     tests/unit/test_RobotCommandHandle.py
     tests/unit/test_types.py
     tests/unit/test_vehicletraits.py

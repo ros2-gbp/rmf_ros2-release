@@ -349,7 +349,22 @@ rmf_traffic::Duration GoToPlace::Active::remaining_time_estimate() const
     if (_execution->plan_id)
     {
       if (const auto delay = itin.cumulative_delay(*_execution->plan_id))
-        return finish - now + *delay;
+      {
+        // Parabolic frustration penalty (delay^2 / reference_delay):
+        // zero at zero delay, matches delay at reference_delay,
+        // grows much faster beyond.
+        // Used so remaining_time_estimate keeps growing with the stall
+        // instead of staying flat, which makes the task planner less likely
+        // to assign new tasks to robots stuck on lift/door/mutex events.
+        const auto reference_delay = std::chrono::seconds(60);
+        const double delay_s =
+          std::max(0.0, rmf_traffic::time::to_seconds(*delay));
+        const double reference_delay_s =
+          rmf_traffic::time::to_seconds(reference_delay);
+        const auto frustration_penalty =
+          rmf_traffic::time::from_seconds(delay_s * delay_s / reference_delay_s);
+        return finish - now + *delay + frustration_penalty;
+      }
     }
     else
     {
@@ -559,7 +574,8 @@ void GoToPlace::Active::_find_plan()
     return;
   }
 
-  if (_context->location().size() == 0)
+  const auto location = _context->location();
+  if (location.size() == 0)
   {
     RCLCPP_ERROR(
       _context->node()->get_logger(),
@@ -580,7 +596,7 @@ void GoToPlace::Active::_find_plan()
   std::stringstream ss;
   ss << "Planning for [" << _context->requester_id()
      << "] to [" << goal_name << "] from one of these locations:"
-     << agv::print_starts(_context->location(), graph);
+     << agv::print_starts(location, graph);
 
   RCLCPP_INFO(
     _context->node()->get_logger(),
@@ -589,7 +605,7 @@ void GoToPlace::Active::_find_plan()
 
   // TODO(MXG): Make the planning time limit configurable
   _find_path_service = std::make_shared<services::FindPath>(
-    _context->planner(), _context->location(), *_chosen_goal,
+    _context->planner(), location, *_chosen_goal,
     _context->schedule()->snapshot(), _context->itinerary().id(),
     _context->profile(),
     std::chrono::seconds(5));
@@ -715,7 +731,8 @@ void GoToPlace::Active::_execute_plan(
 
     const auto& graph = _context->navigation_graph();
     _context->retain_mutex_groups(
-      {graph.get_waypoint(goal.waypoint()).in_mutex_group()});
+      {graph.get_waypoint(goal.waypoint()).in_mutex_group()},
+      "empty plan");
     if (_is_final_destination)
     {
       _state->update_status(Status::Completed);
@@ -753,7 +770,7 @@ void GoToPlace::Active::_execute_plan(
     auto event = rmf_task::events::SimpleEventState::make(
       _assign_id->assign(),
       "detour",
-      "The robot is parking until its destination becomes available", 
+      "The robot is parking until its destination becomes available",
       Status::Underway,
       {});
     _state->update_dependencies({event});
