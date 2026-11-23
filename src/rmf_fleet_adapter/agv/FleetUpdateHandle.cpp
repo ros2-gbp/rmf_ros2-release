@@ -33,7 +33,9 @@
 #include "../tasks/Clean.hpp"
 #include "../tasks/ChargeBattery.hpp"
 #include "../tasks/Compose.hpp"
+#include "../tasks/Zone.hpp"
 #include "../events/GoToPlace.hpp"
+#include "../events/GoToZone.hpp"
 #include "../events/ResponsiveWait.hpp"
 #include "../events/PerformAction.hpp"
 #include "../events/DynamicEvent.hpp"
@@ -408,7 +410,7 @@ public:
       {
         RCLCPP_ERROR(
           node->get_logger(),
-          "[AllocateTasks] Unable to find a robot associated with index [%d]",
+          "[AllocateTasks] Unable to find a robot associated with index [%zu]",
           i);
         continue;
       }
@@ -520,17 +522,40 @@ void FleetUpdateHandle::Implementation::bid_notice_cb(
       });
   }
 
-  // If a fleet_name was specified in the request, only proceed if the value matches
-  // the name of this fleet.
-  if (request_msg.contains("fleet_name") &&
-    request_msg["fleet_name"].template get<std::string>() != name)
+  // If a fleet_name was specified in the request, only proceed if this
+  // fleet's name matches it. fleet_name may be a single string or an array
+  // of strings, in which case this fleet must be one of the listed names.
+  if (request_msg.contains("fleet_name"))
   {
-    RCLCPP_INFO(
-      node->get_logger(),
-      "Ignoring BidNotice request as it is for fleet [%s].",
-      request_msg["fleet_name"].template get<std::string>().c_str());
-    return;
+    const auto& fleet_name = request_msg["fleet_name"];
+    bool allowed = false;
+    if (fleet_name.is_array())
+    {
+      for (const auto& n : fleet_name)
+      {
+        if (n.template get<std::string>() == name)
+        {
+          allowed = true;
+          break;
+        }
+      }
+    }
+    else
+    {
+      allowed = fleet_name.template get<std::string>() == name;
+    }
+
+    if (!allowed)
+    {
+      RCLCPP_INFO(
+        node->get_logger(),
+        "Ignoring BidNotice request as fleet [%s] is not in the requested "
+        "fleet_name list.",
+        name.c_str());
+      return;
+    }
   }
+
 
   std::vector<std::string> errors = {};
   const auto new_request = convert(task_id, request_msg, errors);
@@ -880,7 +905,7 @@ void FleetUpdateHandle::Implementation::dispatch_command_cb(
           [task_id, name = name, node = node](std::vector<std::string> errors)
           {
             std::stringstream ss;
-            ss << "Unabled to replan assignments when cancelling task ["
+            ss << "Unable to replan assignments when cancelling task ["
                << task_id << "] for fleet [" << name << "]. ";
             if (errors.empty())
             {
@@ -922,7 +947,7 @@ double FleetUpdateHandle::Implementation::compute_cost(
 {
   rmf_task::TaskPlanner::Assignments raw_assignments;
   raw_assignments.reserve(assignments.size());
-  for (const auto [_, queue] : assignments)
+  for (const auto& [_, queue] : assignments)
   {
     raw_assignments.push_back(queue);
   }
@@ -1137,7 +1162,8 @@ namespace {
 std::optional<rmf_fleet_msgs::msg::Location> convert_location(
   const agv::RobotContext& context)
 {
-  if (context.location().empty())
+  const auto location = context.location();
+  if (location.empty())
   {
     const auto& lost = context.lost();
     if (lost.has_value() && lost->location.has_value())
@@ -1161,7 +1187,7 @@ std::optional<rmf_fleet_msgs::msg::Location> convert_location(
   }
 
   const auto& graph = context.planner()->get_configuration().graph();
-  const auto& l = context.location().front();
+  const auto l = location.front();
   const auto& wp = graph.get_waypoint(l.waypoint());
   const Eigen::Vector2d p = l.location().value_or(wp.get_location());
 
@@ -1451,7 +1477,11 @@ public:
   void execute(const LiftSessionEnd&) override {}
   void execute(const LiftMove&) override {}
   void execute(const Wait&) override {}
-  void execute(const Dock& dock) override {}
+  void execute(const Dock& /*dock*/) override {}
+  void execute(const ZonePreEntry&) override {}
+  void execute(const ZonePostEntry&) override {}
+  void execute(const ZonePreExit&) override {}
+  void execute(const ZonePostExit&) override {}
   void execute(const LiftSessionBegin& info) override
   {
     lift = info.lift_name();
@@ -1485,8 +1515,6 @@ std::vector<std::size_t> find_emergency_lift_closures(
     if (const auto* event = lane.exit().event())
       event->execute(executor);
 
-    const auto wp0 = lane.entry().waypoint_index();
-    const auto wp1 = lane.exit().waypoint_index();
     if (executor.enter)
     {
       if (emergency_level_for_lift.count(executor.lift) > 0)
@@ -1667,6 +1695,148 @@ PlaceDeserializer make_place_deserializer(
       return {place, {}};
     };
 }
+
+ZoneDeserializer make_zone_deserializer(
+  std::shared_ptr<const std::shared_ptr<const rmf_traffic::agv::Planner>>
+  planner)
+{
+  return [planner = std::move(planner)](const nlohmann::json& msg)
+    -> DeserializedZone
+    {
+      std::optional<std::string> zone_name;
+      const auto& graph = (*planner)->get_configuration().graph();
+      const auto zone_property = graph.find_known_zone(msg.get<std::string>());
+      if (!zone_property)
+      {
+        return {
+          std::nullopt,
+          {"zone name [" + msg.get<std::string>() + "] cannot be "
+            "found in the navigation graph"}
+        };
+      }
+      zone_name = zone_property->name();
+      return {zone_name, {}};
+    };
+}
+
+ZoneWaypointDeserializer make_zone_waypoint_deserializer(
+  std::shared_ptr<const std::shared_ptr<const rmf_traffic::agv::Planner>>
+  planner)
+{
+  return [planner = std::move(planner)](
+      const std::string& zone_name,
+      const nlohmann::json& msg) -> DeserializedZoneWaypoint
+    {
+      const auto& graph = (*planner)->get_configuration().graph();
+      const auto zone_props = graph.find_known_zone(zone_name);
+      if (!zone_props)
+      {
+        return {
+          std::nullopt,
+          {"zone name [" + zone_name + "] cannot be found in the navigation "
+            "graph"}
+        };
+      }
+
+      // Resolve the JSON value to either a name or a graph waypoint index.
+      std::optional<std::string> name_in;
+      std::optional<std::size_t> index_in;
+      if (msg.is_string())
+      {
+        name_in = msg.get<std::string>();
+      }
+      else if (msg.is_number_integer())
+      {
+        index_in = msg.get<std::size_t>();
+      }
+      else if (msg.is_object() && msg.contains("waypoint"))
+      {
+        const auto& wp_field = msg.at("waypoint");
+        if (wp_field.is_string())
+          name_in = wp_field.get<std::string>();
+        else if (wp_field.is_number_integer())
+          index_in = wp_field.get<std::size_t>();
+      }
+
+      if (!name_in.has_value() && !index_in.has_value())
+      {
+        return {
+          std::nullopt,
+          {"zone waypoint must be a string, integer, or "
+            "{\"waypoint\": <string|integer>}"}
+        };
+      }
+
+      if (index_in.has_value() && *index_in >= graph.num_waypoints())
+      {
+        return {
+          std::nullopt,
+          {"waypoint index [" + std::to_string(*index_in)
+            + "] exceeds the navigation graph size ["
+            + std::to_string(graph.num_waypoints()) + "]"}
+        };
+      }
+
+      for (const auto& iv : zone_props->internal_vertices())
+      {
+        if (name_in.has_value())
+        {
+          // Exact match on full RMF vertex name
+          if (iv.name() == *name_in)
+            return {iv.name(), {}};
+        }
+        else
+        {
+          const auto* wp = graph.find_waypoint(iv.name());
+          if (wp && wp->index() == *index_in)
+            return {iv.name(), {}};
+        }
+      }
+
+      const std::string unknown_wp = name_in.has_value()
+        ? ("[" + *name_in + "]")
+        : ("index [" + std::to_string(*index_in) + "]");
+      return {
+        std::nullopt,
+        {"waypoint " + unknown_wp + " is not an internal vertex of zone ["
+          + zone_name + "]"}
+      };
+    };
+}
+
+ZoneGroupDeserializer make_zone_group_deserializer(
+  std::shared_ptr<const std::shared_ptr<const rmf_traffic::agv::Planner>>
+  planner)
+{
+  return [planner = std::move(planner)](
+      const std::string& zone_name,
+      const nlohmann::json& msg) -> DeserializedZoneGroup
+    {
+      const auto& graph = (*planner)->get_configuration().graph();
+      const auto zone_props = graph.find_known_zone(zone_name);
+      if (!zone_props)
+      {
+        return {
+          std::nullopt,
+          {"zone name [" + zone_name + "] cannot be found in the navigation "
+            "graph"}
+        };
+      }
+
+      const auto group = msg.get<std::string>();
+      for (const auto& iv : zone_props->internal_vertices())
+      {
+        if (iv.get_group_name() == group)
+          return {group, {}};
+      }
+
+      return {
+        std::nullopt,
+        {"group [" + group + "] is not a vertex group of zone ["
+          + zone_name + "]"}
+      };
+    };
+}
 } // anonymous namespace
 
 //==============================================================================
@@ -1683,8 +1853,12 @@ void FleetUpdateHandle::Implementation::add_standard_tasks()
     *activation.phase, activation.event);
 
   events::GoToPlace::add(*activation.event);
+  events::GoToZone::add(*activation.event);
   events::PerformAction::add(*activation.event);
   deserialization.place = make_place_deserializer(planner);
+  deserialization.zone = make_zone_deserializer(planner);
+  deserialization.zone_waypoint = make_zone_waypoint_deserializer(planner);
+  deserialization.zone_group = make_zone_group_deserializer(planner);
   deserialization.add_schema(schemas::place);
 
   events::ResponsiveWait::add(*activation.event);
@@ -1716,6 +1890,9 @@ void FleetUpdateHandle::Implementation::add_standard_tasks()
     deserialization,
     activation,
     node->clock());
+
+  tasks::add_zone(
+    deserialization);
 
   events::DynamicEvent::add(deserialization, activation.event);
 }
@@ -2059,6 +2236,14 @@ FleetUpdateHandle& FleetUpdateHandle::consider_composed_requests(
   ConsiderRequest consider)
 {
   *_pimpl->deserialization.consider_composed = std::move(consider);
+  return *this;
+}
+  
+//==============================================================================
+FleetUpdateHandle& FleetUpdateHandle::consider_zone_requests(
+  ConsiderRequest consider)
+{
+  *_pimpl->deserialization.consider_zone = std::move(consider);
   return *this;
 }
 
@@ -2569,7 +2754,7 @@ FleetUpdateHandle::retreat_to_charger_interval() const
 
 //==============================================================================
 FleetUpdateHandle& FleetUpdateHandle::set_retreat_to_charger_interval(
-  std::optional<rmf_traffic::Duration> duration)
+  std::optional<rmf_traffic::Duration> /*duration*/)
 {
   RCLCPP_WARN(
     _pimpl->node->get_logger(),
