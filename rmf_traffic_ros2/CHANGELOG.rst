@@ -2,10 +2,24 @@
 Changelog for package rmf_traffic_ros2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.12.0 (2026-02-23)
+2.15.0 (2026-11-13)
 -------------------
-* Correct early cull of negotiations (`#478 <https://github.com/open-rmf/rmf_ros2/issues/478>`_)
-* Contributors: kj
+* fix old cmake target for websocket and update other cmake vars (`#580 <https://github.com/open-rmf/rmf_ros2/issues/580>`_)
+* Add GoToZone feature (`#516 <https://github.com/open-rmf/rmf_ros2/issues/516>`_)
+  Co-authored-by: kjchee <keai_jiang_chee@cgh.com.sg>
+  Co-authored-by: Loke Ji Xian <loke_ji_xian@cgh.com.sg>
+  Co-authored-by: Tey Leong Teck <leong_teck_tey@cgh.com.sg>
+  Co-authored-by: Michael X. Grey <mxgrey@intrinsic.ai>
+* Fix typos in docs, launch args, log messages and comments (`#568 <https://github.com/open-rmf/rmf_ros2/issues/568>`_)
+  Co-authored-by: Mosiwon <Lots-ninety-nine@users.noreply.github.com>
+* Contributors: Aaron Chong, Mosiwon, chart
+
+2.14.0 (2026-09-26)
+-------------------
+* Set schedule node ID when changes are explicitly requested (`#538 <https://github.com/open-rmf/rmf_ros2/issues/538>`_)
+  This fixes the issue reported by `#537 <https://github.com/open-rmf/rmf_ros2/issues/537>`_
+  Thanks @amerm for identifying the cause and providing the solution.
+* Contributors: Grey
 
 2.13.0 (2026-06-15)
 -------------------
@@ -17,9 +31,12 @@ Changelog for package rmf_traffic_ros2
   * capture only one variable for cumulative delay
   * revert string literal
   ---------
-* Bump and release 2.12.0 (`#509 <https://github.com/open-rmf/rmf_ros2/issues/509>`_)
+* Contributors: Aaron Chong, Grey
+
+2.12.0 (2026-02-23)
+-------------------
 * Correct early cull of negotiations (`#478 <https://github.com/open-rmf/rmf_ros2/issues/478>`_)
-* Contributors: Aaron Chong, Grey, Luca Della Vedova, kj
+* Contributors: kj
 
 2.11.1 (2025-07-21)
 -------------------

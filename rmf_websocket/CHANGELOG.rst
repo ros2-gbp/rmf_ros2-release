@@ -2,11 +2,19 @@
 Changelog for package rmf_websocket
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.12.0 (2026-02-23)
+2.15.0 (2026-11-13)
 -------------------
-* Added RCL logging for BroadcastServer (`#458 <https://github.com/open-rmf/rmf_ros2/issues/458>`_)
-* Fix BroadcastServer shutdown errors (`#457 <https://github.com/open-rmf/rmf_ros2/issues/457>`_)
-* Contributors: Saurabh Kamat
+* fix old cmake target for websocket and update other cmake vars (`#580 <https://github.com/open-rmf/rmf_ros2/issues/580>`_)
+* Fix typos in docs, launch args, log messages and comments (`#568 <https://github.com/open-rmf/rmf_ros2/issues/568>`_)
+  Co-authored-by: Mosiwon <Lots-ninety-nine@users.noreply.github.com>
+* Contributors: Aaron Chong, Mosiwon
+
+2.14.0 (2026-09-26)
+-------------------
+* Support both JSON schema validator target names (`#541 <https://github.com/open-rmf/rmf_ros2/issues/541>`_)
+* Fix spelling: occured -> occurred in rmf_websocket exception logs (`#533 <https://github.com/open-rmf/rmf_ros2/issues/533>`_)
+  Co-authored-by: Lots-ninety-nine <261080291+Lots-ninety-nine@users.noreply.github.com>
+* Contributors: Wolf Vollprecht
 
 2.13.0 (2026-06-15)
 -------------------
@@ -19,18 +27,13 @@ Changelog for package rmf_websocket
   * capture only one variable for cumulative delay
   * revert string literal
   ---------
-* Bump and release 2.12.0 (`#509 <https://github.com/open-rmf/rmf_ros2/issues/509>`_)
+* Contributors: Aaron Chong, Grey, Luca Della Vedova
+
+2.12.0 (2026-02-23)
+-------------------
 * Added RCL logging for BroadcastServer (`#458 <https://github.com/open-rmf/rmf_ros2/issues/458>`_)
-  * Added new API to pass in a logger
-  * Changed test to use new BraodcastServer API
-  * Removed default value of node from logging related ws api
-  * Lint fixes
-  ---------
 * Fix BroadcastServer shutdown errors (`#457 <https://github.com/open-rmf/rmf_ros2/issues/457>`_)
-  * Fix shutdown file descriptor errors
-  * Removed logs to stdout
-  ---------
-* Contributors: Aaron Chong, Grey, Luca Della Vedova, Saurabh Kamat
+* Contributors: Saurabh Kamat
 
 2.11.1 (2025-07-21)
 -------------------

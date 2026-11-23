@@ -2,20 +2,27 @@
 Changelog for package rmf_task_ros2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.15.0 (2026-11-13)
+-------------------
+* fix old cmake target for websocket and update other cmake vars (`#580 <https://github.com/open-rmf/rmf_ros2/issues/580>`_)
+* bump cmake version (`#570 <https://github.com/open-rmf/rmf_ros2/issues/570>`_)
+* Fix typos in docs, launch args, log messages and comments (`#568 <https://github.com/open-rmf/rmf_ros2/issues/568>`_)
+  Co-authored-by: Mosiwon <Lots-ninety-nine@users.noreply.github.com>
+* Contributors: Aaron Chong, Mosiwon
+
+2.14.0 (2026-09-26)
+-------------------
+* Support both JSON schema validator target names (`#541 <https://github.com/open-rmf/rmf_ros2/issues/541>`_)
+* Contributors: Wolf Vollprecht
+
+2.13.0 (2026-06-15)
+-------------------
+
 2.12.0 (2026-02-23)
 -------------------
 * Removed /task_summaries publishers from rmf_fleet_adapter (`#487 <https://github.com/open-rmf/rmf_ros2/issues/487>`_)
 * Fix indefinite growth of active_dispatch_states (`#468 <https://github.com/open-rmf/rmf_ros2/issues/468>`_)
 * Contributors: cheriehu, kj
-
-2.13.0 (2026-06-15)
--------------------
-* Migrate to ROS Lyrical (`#520 <https://github.com/open-rmf/rmf_ros2/issues/520>`_)
-* Bump and release 2.12.0 (`#509 <https://github.com/open-rmf/rmf_ros2/issues/509>`_)
-* Removed /task_summaries publishers from rmf_fleet_adapter (`#487 <https://github.com/open-rmf/rmf_ros2/issues/487>`_)
-  Co-authored-by: Luca Della Vedova <lucadv@intrinsic.ai>
-* Fix indefinite growth of active_dispatch_states (`#468 <https://github.com/open-rmf/rmf_ros2/issues/468>`_)
-* Contributors: Grey, Luca Della Vedova, cheriehu, kj
 
 2.11.1 (2025-07-21)
 -------------------

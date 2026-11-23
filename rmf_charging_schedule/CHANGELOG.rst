@@ -2,13 +2,20 @@
 Changelog for package rmf_charging_schedule
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.12.0 (2026-02-23)
+2.15.0 (2026-11-13)
+-------------------
+* Fix typos in docs, launch args, log messages and comments (`#568 <https://github.com/open-rmf/rmf_ros2/issues/568>`_)
+  Co-authored-by: Mosiwon <Lots-ninety-nine@users.noreply.github.com>
+* Contributors: Mosiwon
+
+2.14.0 (2026-09-26)
 -------------------
 
 2.13.0 (2026-06-15)
 -------------------
-* Bump and release 2.12.0 (`#509 <https://github.com/open-rmf/rmf_ros2/issues/509>`_)
-* Contributors: Luca Della Vedova
+
+2.12.0 (2026-02-23)
+-------------------
 
 2.11.1 (2025-07-21)
 -------------------

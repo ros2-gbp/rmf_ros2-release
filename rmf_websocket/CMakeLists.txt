@@ -25,6 +25,12 @@ find_package(Boost REQUIRED)
 find_package(Threads)
 find_package(backward_ros REQUIRED)
 
+if(TARGET nlohmann_json_schema_validator)
+  set(json_schema_validator_target nlohmann_json_schema_validator)
+else()
+  set(json_schema_validator_target nlohmann_json_schema_validator::validator)
+endif()
+
 add_subdirectory(websocketpp)
 
 add_library(rmf_websocket SHARED
@@ -35,10 +41,10 @@ add_library(rmf_websocket SHARED
 
 target_link_libraries(rmf_websocket
   PUBLIC
-    ${rclcpp_LIBRARIES}
+    rclcpp::rclcpp
     rmf_utils::rmf_utils
     nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator::validator
+    ${json_schema_validator_target}
   PRIVATE
     ${Boost_LIBRARIES}
     Threads::Threads
@@ -49,7 +55,6 @@ target_include_directories(rmf_websocket
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-    ${rclcpp_INCLUDE_DIRS}
 )
 
 add_executable(example_client
@@ -67,12 +72,11 @@ target_include_directories(example_client
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-    ${rclcpp_INCLUDE_DIRS}
 )
 
 
 ament_export_targets(export_rmf_websocket HAS_LIBRARY_TARGET)
-ament_export_dependencies(rmf_traffic rclcpp nlohmann_json)
+ament_export_dependencies(rmf_utils rclcpp nlohmann_json nlohmann_json_schema_validator_vendor nlohmann_json_schema_validator)
 
 #===============================================================================
 install(
@@ -123,7 +127,7 @@ if(BUILD_TESTING)
     TIMEOUT 300)
   target_link_libraries(test_client
     PUBLIC
-      ${rclcpp_LIBRARIES}
+      rclcpp::rclcpp
       rmf_utils::rmf_utils
       ${Boost_LIBRARIES}
       rmf_websocket
@@ -136,7 +140,6 @@ if(BUILD_TESTING)
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-      ${rclcpp_INCLUDE_DIRS}
   )
 
 
@@ -145,7 +148,7 @@ if(BUILD_TESTING)
     TIMEOUT 300)
   target_link_libraries(test_client_no_server
     PUBLIC
-      ${rclcpp_LIBRARIES}
+      rclcpp::rclcpp
       rmf_utils::rmf_utils
       ${Boost_LIBRARIES}
       rmf_websocket
@@ -158,7 +161,6 @@ if(BUILD_TESTING)
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-      ${rclcpp_INCLUDE_DIRS}
   )
 
   ament_add_catch2(test_client_with_update_cb
@@ -166,7 +168,7 @@ if(BUILD_TESTING)
     TIMEOUT 300)
   target_link_libraries(test_client_with_update_cb
     PUBLIC
-      ${rclcpp_LIBRARIES}
+      rclcpp::rclcpp
       rmf_utils::rmf_utils
       ${Boost_LIBRARIES}
       rmf_websocket
@@ -179,7 +181,6 @@ if(BUILD_TESTING)
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-      ${rclcpp_INCLUDE_DIRS}
   )
 endif()
 
