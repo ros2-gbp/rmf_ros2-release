@@ -73,6 +73,10 @@ public:
   ///   robot requires communication with the Schedule Node, so there may be a
   ///   delay before the robot is ready to be used.
   ///
+  /// \warning This will throw a std::runtime_error if start is empty or if
+  /// no charging waypoint is reachable from the robot's starting location in
+  /// the navigation graph.
+  ///
   /// \return a handle to give the adapter updates about the robot.
   void add_robot(
     std::shared_ptr<RobotCommandHandle> command,
@@ -190,6 +194,19 @@ public:
   ///   The FleetUpdateHandle will ensure that the request is feasible for the
   ///   robots before triggering this callback.
   FleetUpdateHandle& consider_composed_requests(ConsiderRequest consider);
+
+  /// Allow this fleet adapter to consider zone requests.
+  ///
+  /// Pass in a nullptr to disable zone requests.
+  ///
+  /// By default, zone requests are always accepted.
+  ///
+  /// \param[in] consider
+  ///   Decide whether to accept a zone request. The description will satisfy
+  ///   the event_description__zone.json schema of rmf_fleet_adapter. The
+  ///   FleetUpdateHandle will ensure that the request is feasible for the
+  ///   robots before triggering this callback.
+  FleetUpdateHandle& consider_zone_requests(ConsiderRequest consider);
 
   /// Allow this fleet adapter to execute a PerformAction activity of specified
   /// category which may be present in sequence event.

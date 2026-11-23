@@ -26,6 +26,7 @@
 #include <rmf_fleet_adapter/StandardNames.hpp>
 
 #include <rmf_fleet_msgs/msg/mutex_group_manual_release.hpp>
+#include <rmf_zone_msgs/msg/zone_hint.hpp>
 #include <rmf_task_msgs/action/dynamic_event.hpp>
 #include <rmf_task_msgs/msg/dynamic_event_description.hpp>
 #include <rmf_task_msgs/msg/dynamic_event_status.hpp>
@@ -181,6 +182,27 @@ public:
     text = "Wait";
   }
 
+  void execute(const ZonePreEntry& zone) override
+  {
+    text = "Zone " + zone.zone_name();
+  }
+
+  void execute(const ZonePostEntry& zone) override
+  {
+    text = "Zone " + zone.zone_name();
+  }
+
+  void execute(const ZonePreExit& zone) override
+  {
+    text = "Zone " + zone.zone_name();
+  }
+
+  void execute(const ZonePostExit& zone) override
+  {
+    text = "Zone " + zone.zone_name();
+  }
+
+
   void execute(const Dock& dock) override
   {
     text = "Dock " + dock.dock_name();
@@ -199,6 +221,13 @@ inline std::string print_waypoint(
 
   ss << wp.get_map_name() << " <" << wp.get_location().transpose() << "> ["
      << wp.name_or_index() << "]";
+
+  const auto& mutex = wp.in_mutex_group();
+  if (!mutex.empty())
+  {
+    ss << " [mutex: " << mutex << "]";
+  }
+
   return ss.str();
 }
 
@@ -272,6 +301,13 @@ inline std::string print_lane(
   const auto& lane = graph.get_lane(i_lane);
   ss << "lane " << i_lane << ": " << print_lane_node(lane.entry(), graph)
      << " -> " << print_lane_node(lane.exit(), graph);
+
+  const auto& mutex = lane.properties().in_mutex_group();
+  if (!mutex.empty())
+  {
+    ss << " [mutex: " << mutex  << "]";
+  }
+
   return ss.str();
 }
 
@@ -507,7 +543,8 @@ public:
 
   /// This is the current "location" of the robot, which can be used to initiate
   /// a planning job
-  const rmf_traffic::agv::Plan::StartSet& location() const;
+  rmf_traffic::agv::Plan::StartSet location() const;
+  // const rmf_traffic::agv::Plan::StartSet& location() const;
 
   /// Set the current location for the robot in terms of a planner start set
   void set_location(rmf_traffic::agv::Plan::StartSet location_);
@@ -518,6 +555,11 @@ public:
 
   /// Set that the robot is currently lost
   void set_lost(std::optional<Location> location);
+
+  /// Used by certain events to lock in a specific waypoint as the current event
+  /// waypoint. This alters how the planner interprets the current start set,
+  /// focusing it in on the waypoint of the event.
+  std::shared_ptr<std::size_t> _set_current_event_waypoint(std::size_t index);
 
   /// Filter closed lanes out of the planner start set. At least one start will
   /// be retained so that the planner can offer some solution, even if all
@@ -811,7 +853,9 @@ public:
     rmf_traffic::Time claim_time);
 
   /// Retain only the mutex groups listed in the set. Release all others.
-  void retain_mutex_groups(const std::unordered_set<std::string>& groups);
+  void retain_mutex_groups(
+    const std::unordered_set<std::string>& groups,
+    const std::string& backtrace);
 
   void schedule_itinerary(
     std::shared_ptr<rmf_traffic::PlanId> plan_id,
@@ -985,6 +1029,92 @@ public:
 
   bool debug_positions = false;
 
+  /// The hints an on-going GoToZone is expressing for a zone, most preferred
+  /// first. Each says where to park, and facing which way.
+  using ZonePreference = std::vector<rmf_zone_msgs::msg::ZoneHint>;
+  using ZonePreferenceHandle = std::shared_ptr<const ZonePreference>;
+
+  /// Set the preference for a zone and return the handle that owns it. It
+  /// applies for as long as the caller holds that handle, and no longer.
+  [[nodiscard]] ZonePreferenceHandle set_zone_preference(
+    std::string zone_name,
+    ZonePreference preference);
+
+  /// Get the preference currently expressed for this zone, or nullptr.
+  ZonePreferenceHandle zone_preference(const std::string& zone_name) const;
+
+  /// The zone manager's grant of one vertex to this robot. Shared, so the
+  /// context holds one reference and any event using it holds another.
+  struct ZoneBooking
+  {
+    std::string zone_name;
+    std::string waypoint_name;
+    rmf_traffic::agv::Plan::Goal goal;
+    std::string granted_under_request_id;
+  };
+
+  using ZoneBookingPtr = std::shared_ptr<ZoneBooking>;
+
+  /// Set the booking for a zone, replacing any already held for that zone.
+  void set_zone_booking(
+    std::string zone_name,
+    std::string waypoint_name,
+    rmf_traffic::agv::Plan::Goal goal,
+    std::string request_id);
+
+  /// Get the booking held for a zone, or nullptr
+  ZoneBookingPtr zone_booking(const std::string& zone_name) const;
+
+  /// What to do with a zone booking's reservation ticket when the booking is
+  /// cleared.
+  enum class ZoneTicketDisposal
+  {
+    /// Keep the vertex reserved and let the zone manager take it back, so it
+    /// stays in that zone's pool for the next robot.
+    HandBack,
+
+    /// Give the vertex back to the reservation node.
+    Release
+  };
+
+  /// Release the booking held for a zone
+  void clear_zone_booking(
+    const std::string& zone_name,
+    ZoneTicketDisposal disposal);
+
+  /// Get whether this robot holds any zone booking at all
+  bool has_zone_bookings() const;
+
+  /// Take over a reservation ticket the zone manager was holding for us.
+  /// Nothing is released, so the vertex never looks free for an instant, and
+  /// the reservation negotiator short-circuits instead of asking for it again.
+  ///
+  /// \param[in] ticket_id
+  ///   The live ticket currently holding the vertex.
+  ///
+  /// \param[in] resource
+  ///   The vertex the ticket holds, by name.
+  ///
+  /// \param[in] release_previous
+  ///   Whether to give our current ticket back to the reservation node.
+  void _adopt_zone_ticket(
+    uint64_t ticket_id,
+    const std::string& resource,
+    bool release_previous = true);
+
+  /// Get whether a zone manager is listening for our zone requests.
+  bool _zone_manager_listening() const;
+
+  /// The zone whose booking sits on this waypoint, if any. Says whether a
+  /// reservation we are about to displace belongs to a zone we still hold,
+  /// which the ticket alone cannot.
+  std::optional<std::string> zone_holding_waypoint(
+    const std::string& waypoint_name) const;
+
+  /// Visit every booking no event is using.
+  void for_each_releasable_booking(
+    const std::function<void(const ZoneBooking&)>& fn) const;
+
 private:
 
   RobotContext(
@@ -1003,6 +1133,15 @@ private:
     std::shared_ptr<const rmf_task::TaskPlanner> task_planner);
 
   std::weak_ptr<RobotCommandHandle> _command_handle;
+
+  /// If an event is taking place at a waypoint, this field will be set with the
+  /// value of that waypoint. As long as this is set, any replan will use this
+  /// waypoint as its starting point instead of _location.
+  ///
+  /// This is used by LockMutexGroup to prevent deadlocks that could arise from
+  /// the planner chosing to start from a different Plan::Start element that
+  /// requires some other mutex to also be locked before proceeding.
+  std::weak_ptr<std::size_t> _current_event_waypoint;
   std::vector<rmf_traffic::agv::Plan::Start> _location;
   std::vector<rmf_traffic::agv::Plan::Start> _most_recent_valid_location;
   rmf_traffic::schedule::Participant _itinerary;
@@ -1050,6 +1189,14 @@ private:
   std::weak_ptr<TaskManager> _task_manager;
   bool _robot_finishing_request = false;
 
+  // Keyed by zone name
+  std::unordered_map<std::string, ZoneBookingPtr> _zone_bookings;
+
+  // Weak on purpose: the event expressing the preference owns it, and its
+  // death is what ends it.
+  std::unordered_map<std::string, std::weak_ptr<const ZonePreference>>
+  _zone_preferences;
+
   RobotUpdateHandle::Unstable::Watchdog _lift_watchdog;
   rmf_traffic::Duration _lift_rewait_duration = std::chrono::seconds(0);
   std::unique_ptr<std::mutex> _commission_mutex =
@@ -1087,8 +1234,11 @@ private:
   void _check_mutex_groups(const rmf_fleet_msgs::msg::MutexGroupStates& states);
   void _retain_mutex_groups(
     const std::unordered_set<std::string>& retain,
-    std::unordered_map<std::string, TimeMsg>& _groups);
-  void _release_mutex_group(const MutexGroupData& data) const;
+    std::unordered_map<std::string, TimeMsg>& _groups,
+    const std::string& backtrace);
+  void _release_mutex_group(
+    const MutexGroupData& data,
+    const std::string& backtrace) const;
   void _publish_mutex_group_requests();
   void _handle_mutex_group_manual_release(
     const rmf_fleet_msgs::msg::MutexGroupManualRelease& msg);
