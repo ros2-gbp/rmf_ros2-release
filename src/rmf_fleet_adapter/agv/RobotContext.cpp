@@ -17,6 +17,7 @@
 
 #include "internal_RobotUpdateHandle.hpp"
 #include "../TaskManager.hpp"
+#include "../phases/Utils.hpp"
 
 #include <rmf_traffic_ros2/Time.hpp>
 
@@ -511,9 +512,273 @@ std::function<rmf_traffic::Time()> RobotContext::clock() const
 }
 
 //==============================================================================
-const rmf_traffic::agv::Plan::StartSet& RobotContext::location() const
+rmf_traffic::agv::Plan::StartSet RobotContext::location() const
+// const rmf_traffic::agv::Plan::StartSet& RobotContext::location() const
 {
-  return _location;
+  if (const auto wp_ptr = _current_event_waypoint.lock())
+  {
+    std::size_t wp = *wp_ptr;
+    const auto& graph = navigation_graph();
+    const auto p_wp = graph.get_waypoint(wp).get_location();
+    const double merge_radius = std::max(
+      graph.get_waypoint(wp).merge_radius().value_or(0.0),
+      nav_params()->max_merge_lane_distance);
+
+    std::optional<Eigen::Vector2d> p = std::nullopt;
+    double orientation = 0.0;
+    for (const auto& start : _location)
+    {
+      orientation = start.orientation();
+      if (start.lane().has_value())
+      {
+        const auto& lane = graph.get_lane(start.lane().value());
+        if (lane.entry().waypoint_index() == wp)
+        {
+          p = start.location().value_or(p_wp);
+          break;
+        }
+      }
+      else if (start.location().has_value())
+      {
+        if ((p_wp - start.location().value()).norm() < merge_radius)
+        {
+          // Get the exact position based on the first location to specify a
+          // one close enough to the current event waypoint. In practice all
+          // positions specified by all start locations should be the same.
+          // Something is wrong with user input if there is any difference
+          // between them.
+          p = start.location().value();
+          break;
+        }
+      }
+      else
+      {
+        const auto p_s = graph.get_waypoint(start.waypoint()).get_location();
+        if ((p_s - p_wp).norm() < merge_radius)
+        {
+          p = p_s;
+          break;
+        }
+      }
+    }
+
+    if (!p.has_value())
+    {
+      // The robot is too far from the current event waypoint. We can't consider
+      // it to be on that waypoint. Just return the _location as reported by
+      // the client.
+      return _location;
+    }
+
+    rmf_traffic::agv::Plan::StartSet starts;
+
+    const auto time = now();
+
+    // Create a start option for every lane coming out of this waypoint
+    for (const std::size_t l : graph.lanes_from(wp))
+    {
+      const auto& lane = graph.get_lane(l);
+      starts.push_back(rmf_traffic::agv::Plan::Start(
+        time,
+        lane.exit().waypoint_index(),
+        orientation,
+        p,
+        l));
+    }
+
+    // Add a start that simply begins directly with the waypoint
+    starts.push_back(rmf_traffic::agv::Plan::Start(
+      time,
+      wp,
+      orientation,
+      p));
+
+    return starts;
+  }
+  else
+  {
+    return _location;
+  }
+}
+
+//==============================================================================
+RobotContext::ZonePreferenceHandle RobotContext::set_zone_preference(
+  std::string zone_name,
+  ZonePreference preference)
+{
+  auto handle = std::make_shared<const ZonePreference>(std::move(preference));
+  _zone_preferences[std::move(zone_name)] = handle;
+  return handle;
+}
+
+//==============================================================================
+RobotContext::ZonePreferenceHandle RobotContext::zone_preference(
+  const std::string& zone_name) const
+{
+  const auto it = _zone_preferences.find(zone_name);
+  if (it == _zone_preferences.end())
+    return nullptr;
+
+  return it->second.lock();
+}
+
+//==============================================================================
+void RobotContext::set_zone_booking(
+  std::string zone_name,
+  std::string waypoint_name,
+  rmf_traffic::agv::Plan::Goal goal,
+  std::string request_id)
+{
+  const auto it = _zone_bookings.find(zone_name);
+  if (it != _zone_bookings.end() && it->second)
+  {
+    it->second->waypoint_name = std::move(waypoint_name);
+    it->second->goal = std::move(goal);
+    it->second->granted_under_request_id = std::move(request_id);
+    return;
+  }
+
+  _zone_bookings[zone_name] = std::make_shared<ZoneBooking>(
+    ZoneBooking{
+      zone_name,
+      std::move(waypoint_name),
+      std::move(goal),
+      std::move(request_id)
+    });
+}
+
+//==============================================================================
+auto RobotContext::zone_booking(const std::string& zone_name) const
+-> ZoneBookingPtr
+{
+  const auto it = _zone_bookings.find(zone_name);
+  if (it == _zone_bookings.end())
+    return nullptr;
+
+  return it->second;
+}
+
+//==============================================================================
+void RobotContext::clear_zone_booking(
+  const std::string& zone_name, ZoneTicketDisposal disposal)
+{
+  const auto it = _zone_bookings.find(zone_name);
+  if (it == _zone_bookings.end())
+    return;
+
+  const auto booking = it->second;
+  _zone_bookings.erase(it);
+
+  if (!booking)
+    return;
+
+  if (disposal == ZoneTicketDisposal::Release)
+  {
+    _reservation_mgr.release_if_holding(booking->waypoint_name);
+    return;
+  }
+
+  // Forget rather than release, so the vertex stays reserved and the manager
+  // can keep it in the zone's pool. Releasing it would put a zone vertex back
+  // in the reservation node's free pool, where a plain GoToPlace naming it
+  // would be granted, and the manager would have to re-acquire it before the
+  // zone could offer it again.
+  if (_zone_manager_listening())
+  {
+    _reservation_mgr.forget_if_holding(booking->waypoint_name);
+    return;
+  }
+
+  // Nobody to hand back to, so give it to the reservation node instead.
+  RCLCPP_WARN(
+    node()->get_logger(),
+    "[%s] is releasing [%s] to the reservation node rather than back to the "
+    "Zone Manager, which is not listening",
+    requester_id().c_str(), booking->waypoint_name.c_str());
+
+  _reservation_mgr.release_if_holding(booking->waypoint_name);
+}
+
+//==============================================================================
+void RobotContext::_adopt_zone_ticket(
+  uint64_t ticket_id,
+  const std::string& resource,
+  bool release_previous)
+{
+  rmf_reservation_msgs::msg::ReservationAllocation adopted;
+  adopted.ticket.ticket_id = ticket_id;
+  adopted.ticket.header.robot_name = name();
+  adopted.ticket.header.fleet_name = group();
+  adopted.resource = resource;
+  adopted.instruction_type =
+    rmf_reservation_msgs::msg::ReservationAllocation::IMMEDIATELY_PROCEED;
+  adopted.chosen_alternative = 0;
+
+  RCLCPP_INFO(
+    node()->get_logger(),
+    "Robot [%s] adopted zone reservation ticket %lu holding [%s]",
+    requester_id().c_str(), ticket_id, resource.c_str());
+
+  if (release_previous)
+    _reservation_mgr.replace_ticket(adopted);
+  else
+    _reservation_mgr.adopt_without_release(adopted);
+}
+
+//==============================================================================
+bool RobotContext::_zone_manager_listening() const
+{
+  const auto n = node();
+  if (!n)
+    return false;
+
+  const auto& pub = n->zone_request();
+  return pub && pub->get_subscription_count() > 0;
+}
+
+//==============================================================================
+std::optional<std::string> RobotContext::zone_holding_waypoint(
+  const std::string& waypoint_name) const
+{
+  for (const auto& [zone_name, booking] : _zone_bookings)
+  {
+    if (booking && booking->waypoint_name == waypoint_name)
+      return zone_name;
+  }
+
+  return std::nullopt;
+}
+
+//==============================================================================
+bool RobotContext::has_zone_bookings() const
+{
+  return !_zone_bookings.empty();
+}
+
+//==============================================================================
+void RobotContext::for_each_releasable_booking(
+  const std::function<void(const ZoneBooking&)>& fn) const
+{
+  // Collected first because releasing mutates the map being walked. The
+  // copies are taken after the use_count() test, so it still sees the true
+  // count.
+  std::vector<ZoneBookingPtr> releasable;
+  for (const auto& entry : _zone_bookings)
+  {
+    const auto& booking = entry.second;
+    if (!booking)
+      continue;
+
+    // _zone_bookings holds one reference for the life of the booking, so
+    // anything above that is an event still using it.
+    if (booking.use_count() > 1)
+      continue;
+
+    releasable.push_back(booking);
+  }
+
+  for (const auto& booking : releasable)
+    fn(*booking);
 }
 
 //==============================================================================
@@ -584,6 +849,15 @@ void RobotContext::set_lost(std::optional<Location> location)
   {
     _lost->location = location;
   }
+}
+
+//==============================================================================
+std::shared_ptr<std::size_t> RobotContext::_set_current_event_waypoint(
+  std::size_t index)
+{
+  const auto wp = std::make_shared<std::size_t>(index);
+  _current_event_waypoint = wp;
+  return wp;
 }
 
 //==============================================================================
@@ -1284,7 +1558,8 @@ const rxcpp::observable<std::string>& RobotContext::request_mutex_groups(
     const auto [it, inserted] = _requesting_mutex_groups.insert({group, t});
     if (!inserted)
     {
-      if (t.nanosec < it->second.nanosec)
+      const auto& prev = it->second;
+      if (t.sec < prev.sec || (t.sec == prev.sec && t.nanosec < prev.nanosec))
         it->second = t;
     }
   }
@@ -1295,10 +1570,11 @@ const rxcpp::observable<std::string>& RobotContext::request_mutex_groups(
 
 //==============================================================================
 void RobotContext::retain_mutex_groups(
-  const std::unordered_set<std::string>& retain)
+  const std::unordered_set<std::string>& retain,
+  const std::string& backtrace)
 {
-  _retain_mutex_groups(retain, _requesting_mutex_groups);
-  _retain_mutex_groups(retain, _locked_mutex_groups);
+  _retain_mutex_groups(retain, _requesting_mutex_groups, backtrace);
+  _retain_mutex_groups(retain, _locked_mutex_groups, backtrace);
 }
 
 //==============================================================================
@@ -1374,7 +1650,7 @@ void RobotContext::schedule_itinerary(
 
       RCLCPP_ERROR(
         node()->get_logger(),
-        "Repeatedly failled attempts to update schedule with an itinerary "
+        "Repeatedly failed attempts to update schedule with an itinerary "
         "containing [%lu] routes with sizes %s during LockMutexGroup "
         "action for robot [%s]. Last attempted value was [%lu]. We will "
         "continue without updating the traffic schedule. This could lead to "
@@ -1772,7 +2048,8 @@ void RobotContext::_check_mutex_groups(
 //==============================================================================
 void RobotContext::_retain_mutex_groups(
   const std::unordered_set<std::string>& retain,
-  std::unordered_map<std::string, TimeMsg>& groups)
+  std::unordered_map<std::string, TimeMsg>& groups,
+  const std::string& backtrace)
 {
   std::vector<MutexGroupData> release;
   for (const auto& [name, time] : groups)
@@ -1785,18 +2062,27 @@ void RobotContext::_retain_mutex_groups(
 
   for (const auto& data : release)
   {
-    _release_mutex_group(data);
+    _release_mutex_group(data, backtrace);
     groups.erase(data.name);
   }
 }
 
 //==============================================================================
-void RobotContext::_release_mutex_group(const MutexGroupData& data) const
+void RobotContext::_release_mutex_group(
+  const MutexGroupData& data,
+  const std::string& backtrace) const
 {
   if (data.name.empty())
   {
     return;
   }
+
+  RCLCPP_DEBUG(
+    _node->get_logger(),
+    "Releasing mutex group [%s] for robot [%s] (backtrace: %s)",
+    data.name.c_str(),
+    requester_id().c_str(),
+    backtrace.c_str());
 
   _node->mutex_group_request()->publish(
     rmf_fleet_msgs::build<rmf_fleet_msgs::msg::MutexGroupRequest>()
@@ -1836,14 +2122,14 @@ void RobotContext::_publish_mutex_group_requests()
         for (const auto& [name, time] : _requesting_mutex_groups)
         {
           warning(name);
-          _release_mutex_group(MutexGroupData{name, time});
+          _release_mutex_group(MutexGroupData{name, time}, "idle");
         }
         _requesting_mutex_groups.clear();
 
         for (const auto& [name, time] : _locked_mutex_groups)
         {
           warning(name);
-          _release_mutex_group(MutexGroupData{name, time});
+          _release_mutex_group(MutexGroupData{name, time}, "idle");
         }
         _locked_mutex_groups.clear();
       }
@@ -1875,7 +2161,26 @@ void RobotContext::_publish_mutex_group_requests()
 void RobotContext::_set_allocated_destination(
   const rmf_reservation_msgs::msg::ReservationAllocation& ticket)
 {
-  _reservation_mgr.replace_ticket(ticket);
+  // Release the ticket to the reservation node if it is a normal waypoint.
+  // Hand it back to the zone manager if it is a zone waypoint.
+  const auto displaced = _get_reserved_location();
+  std::optional<std::string> displaced_zone;
+  if (!displaced.empty() && displaced != ticket.resource)
+    displaced_zone = zone_holding_waypoint(displaced);
+
+  // Ordinary way, release back to reservation node
+  if (!displaced_zone || !_zone_manager_listening())
+  {
+    _reservation_mgr.replace_ticket(ticket);
+    return;
+  }
+
+  // Release it back to zone manager
+  _reservation_mgr.adopt_without_release(ticket);
+
+  node()->zone_request()->publish(
+    phases::make_zone_handback_request(
+      group(), name(), *displaced_zone, displaced));
 }
 
 //==============================================================================
@@ -2122,7 +2427,7 @@ void RobotContext::_handle_mutex_group_manual_release(
     retain.erase(g);
   }
 
-  retain_mutex_groups(retain);
+  retain_mutex_groups(retain, "manual");
 }
 
 //==============================================================================
