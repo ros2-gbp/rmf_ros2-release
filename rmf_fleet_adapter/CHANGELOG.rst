@@ -2,6 +2,81 @@
 Changelog for package rmf_fleet_adapter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.15.0 (2026-11-13)
+-------------------
+* Document runtime_error thrown by add_robot when no charger is reachable (`#579 <https://github.com/open-rmf/rmf_ros2/issues/579>`_)
+  Closes `#553 <https://github.com/open-rmf/rmf_ros2/issues/553>`_
+  ---------
+  Co-authored-by: Grey <mxgrey@intrinsic.ai>
+  Co-authored-by: Aaron Chong <aaronchongth@gmail.com>
+* fix old cmake target for websocket and update other cmake vars (`#580 <https://github.com/open-rmf/rmf_ros2/issues/580>`_)
+* Keep the boarded destination when re-summoning a lift after a replan (`#556 <https://github.com/open-rmf/rmf_ros2/issues/556>`_)
+  ---------
+  Co-authored-by: Grey <mxgrey@intrinsic.ai>
+* Add GoToZone feature (`#516 <https://github.com/open-rmf/rmf_ros2/issues/516>`_)
+  Co-authored-by: kjchee <keai_jiang_chee@cgh.com.sg>
+  Co-authored-by: Loke Ji Xian <loke_ji_xian@cgh.com.sg>
+  Co-authored-by: Tey Leong Teck <leong_teck_tey@cgh.com.sg>
+  Co-authored-by: Michael X. Grey <mxgrey@intrinsic.ai>
+* bump cmake version (`#570 <https://github.com/open-rmf/rmf_ros2/issues/570>`_)
+* Fix typos in docs, launch args, log messages and comments (`#568 <https://github.com/open-rmf/rmf_ros2/issues/568>`_)
+  Co-authored-by: Mosiwon <Lots-ninety-nine@users.noreply.github.com>
+* fix(mutex): compare full claim_time instead of nanosec only (`#551 <https://github.com/open-rmf/rmf_ros2/issues/551>`_)
+  Co-authored-by: Grey <mxgrey@intrinsic.ai>
+* Contributors: Aaron Chong, Arjo Chakravarty, Mosiwon, chart, h-wata
+
+2.14.0 (2026-09-26)
+-------------------
+* Support both JSON schema validator target names in rmf_fleet_adapter (`#558 <https://github.com/open-rmf/rmf_ros2/issues/558>`_)
+  `#541 <https://github.com/open-rmf/rmf_ros2/issues/541>`_ added a fallback for installations that export the validator as
+  nlohmann_json_schema_validator instead of
+  nlohmann_json_schema_validator::validator, but applied it only to
+  rmf_task_ros2 and rmf_websocket. rmf_fleet_adapter links the same
+  library and still hardcodes the namespaced name, so on those
+  installations its CMake generate step fails with "Target ... links to
+  nlohmann_json_schema_validator::validator but the target was not found".
+  Apply the same pattern used by rmf_websocket, covering both the library
+  and the BUILD_TESTING target.
+* Fix phase key for skip requests (`#543 <https://github.com/open-rmf/rmf_ros2/issues/543>`_)
+  Generated-by: OpenAI Codex (GPT-5)
+  Co-authored-by: Igor Stadnyk <fallenmi@users.noreply.github.com>
+* Submit bid as long as fleet name exists (in string or array) (`#534 <https://github.com/open-rmf/rmf_ros2/issues/534>`_)
+* Add missing include to unordered_set (`#535 <https://github.com/open-rmf/rmf_ros2/issues/535>`_)
+* Fix EasyTrafficLight publish fleet state (`#525 <https://github.com/open-rmf/rmf_ros2/issues/525>`_)
+* Fix cumulative delay calculation in EasyTrafficLight (`#524 <https://github.com/open-rmf/rmf_ros2/issues/524>`_)
+* Clean up LegacyPhaseShim subscription after task_summaries removal (`#511 <https://github.com/open-rmf/rmf_ros2/issues/511>`_)
+  Co-authored-by: Grey <mxgrey@intrinsic.ai>
+* Contributors: Grey, Igor Stadnyk, Leong Teck, Luca Della Vedova, Matthew Wong, Mosiwon, h-wata, jixiancgh, kj
+
+2.13.0 (2026-06-15)
+-------------------
+* Migrate to ROS Lyrical (`#520 <https://github.com/open-rmf/rmf_ros2/issues/520>`_)
+* Fix descrption typo in robot_state_aggregator launch file (`#521 <https://github.com/open-rmf/rmf_ros2/issues/521>`_)
+  Co-authored-by: Lots-ninety-nine <261080291+Lots-ninety-nine@users.noreply.github.com>
+* Make expected_finish_state reflect cumulative delay, plus frustration penalty (`#518 <https://github.com/open-rmf/rmf_ros2/issues/518>`_)
+* Resolve compilation warnings (`#514 <https://github.com/open-rmf/rmf_ros2/issues/514>`_)
+  * resolve compilation warnings
+  * more deprecated changes
+  * differentiate deprecated
+  * capture only one variable for cumulative delay
+  * revert string literal
+  ---------
+* Checks idle behavior before executing emergency charge (`#512 <https://github.com/open-rmf/rmf_ros2/issues/512>`_)
+  * check idle behaviors when considering emergency charge
+  * check for label
+  ---------
+* emit completion legacy state if lift is already on the level (`#510 <https://github.com/open-rmf/rmf_ros2/issues/510>`_)
+* Fix potential deadlocks from execution of mutex lock and release (`#490 <https://github.com/open-rmf/rmf_ros2/issues/490>`_)
+  * Fix mutex lock placement within execution
+  * Clean up debug code
+  * Introduce the concept of a current event waypoint
+  * Set current_event_waypoint during mutex lock event
+  * Debugging
+  * Eliminate undefined behavior from RobotContext::location change
+  * Finish debugging
+  * Set orientation based on location update
+* Contributors: Aaron Chong, kj, Grey, Mosiwon
+
 2.12.0 (2026-02-23)
 -------------------
 * Fix dispatch command acknowledgment message publishing (`#508 <https://github.com/open-rmf/rmf_ros2/issues/508>`_)
