@@ -2,6 +2,33 @@
 Changelog for package rmf_websocket
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.15.0 (2026-11-13)
+-------------------
+* fix old cmake target for websocket and update other cmake vars (`#580 <https://github.com/open-rmf/rmf_ros2/issues/580>`_)
+* Fix typos in docs, launch args, log messages and comments (`#568 <https://github.com/open-rmf/rmf_ros2/issues/568>`_)
+  Co-authored-by: Mosiwon <Lots-ninety-nine@users.noreply.github.com>
+* Contributors: Aaron Chong, Mosiwon
+
+2.14.0 (2026-09-26)
+-------------------
+* Support both JSON schema validator target names (`#541 <https://github.com/open-rmf/rmf_ros2/issues/541>`_)
+* Fix spelling: occured -> occurred in rmf_websocket exception logs (`#533 <https://github.com/open-rmf/rmf_ros2/issues/533>`_)
+  Co-authored-by: Lots-ninety-nine <261080291+Lots-ninety-nine@users.noreply.github.com>
+* Contributors: Wolf Vollprecht
+
+2.13.0 (2026-06-15)
+-------------------
+* Migrate to ROS Lyrical (`#520 <https://github.com/open-rmf/rmf_ros2/issues/520>`_)
+* Force C++-17 for rmf_websocket (`#517 <https://github.com/open-rmf/rmf_ros2/issues/517>`_)
+* Resolve compilation warnings (`#514 <https://github.com/open-rmf/rmf_ros2/issues/514>`_)
+  * resolve compilation warnings
+  * more deprecated changes
+  * differentiate deprecated
+  * capture only one variable for cumulative delay
+  * revert string literal
+  ---------
+* Contributors: Aaron Chong, Grey, Luca Della Vedova
+
 2.12.0 (2026-02-23)
 -------------------
 * Added RCL logging for BroadcastServer (`#458 <https://github.com/open-rmf/rmf_ros2/issues/458>`_)
