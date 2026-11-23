@@ -156,7 +156,6 @@ public:
     std::optional<rmf_traffic::Duration> remaining_time;
     bool request_replan;
     bool okay;
-    bool automatic_cancel;
     std::optional<ScheduleOverride> schedule_override;
 
     void update_location(
@@ -195,8 +194,7 @@ public:
       state(std::move(state_)),
       remaining_time(remaining_time_),
       request_replan(false),
-      okay(true),
-      automatic_cancel(true)
+      okay(true)
     {
       // Do nothing
     }
@@ -313,23 +311,6 @@ public:
       Implementation{stubbornness});
 
     return output;
-  }
-};
-
-//==============================================================================
-class RobotUpdateHandle::LiftDestination::Implementation
-{
-public:
-  std::string lift;
-  std::string level;
-
-  static RobotUpdateHandle::LiftDestination make(
-    std::string lift, std::string level)
-  {
-    RobotUpdateHandle::LiftDestination result;
-    result._pimpl->lift = std::move(lift);
-    result._pimpl->level = std::move(level);
-    return result;
   }
 };
 

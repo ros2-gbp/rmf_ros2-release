@@ -220,10 +220,6 @@ public:
   void execute(const LiftSessionEnd&) override {}
   void execute(const LiftMove&) override {}
   void execute(const Wait&) override {}
-  void execute(const ZonePreEntry&) override {}
-  void execute(const ZonePostEntry&) override {}
-  void execute(const ZonePreExit&) override {}
-  void execute(const ZonePostExit&) override {}
   void execute(const Dock& dock) override
   {
     if (!visited_docks.insert(dock.dock_name()).second)
@@ -310,9 +306,7 @@ std::shared_ptr<EasyFullControl> Adapter::add_easy_fleet(
     config.recharge_threshold(),
     config.recharge_soc(),
     config.account_for_battery_drain(),
-    config.finishing_request(),
-    config.task_assignment_strategy());
-    
+    config.finishing_request());
 
   if (!planner_params_ok)
   {
@@ -343,15 +337,6 @@ std::shared_ptr<EasyFullControl> Adapter::add_easy_fleet(
       RCLCPP_INFO(
         this->node()->get_logger(),
         "Fleet [%s] is configured to perform patrol tasks",
-        config.fleet_name().c_str());
-    }
-
-    if (task == "zone" && consider)
-    {
-      fleet_handle->consider_zone_requests(consider);
-      RCLCPP_INFO(
-        this->node()->get_logger(),
-        "Fleet [%s] is configured to perform zone tasks",
         config.fleet_name().c_str());
     }
 
@@ -394,12 +379,10 @@ std::shared_ptr<EasyFullControl> Adapter::add_easy_fleet(
     fleet_handle,
     config.skip_rotation_commands(),
     tf_dict,
-    config.strict_lanes(),
     config.default_responsive_wait(),
     config.default_max_merge_waypoint_distance(),
     config.default_max_merge_lane_distance(),
-    config.default_min_lane_length(),
-    config.using_parking_reservation_system());
+    config.default_min_lane_length());
 }
 
 //==============================================================================

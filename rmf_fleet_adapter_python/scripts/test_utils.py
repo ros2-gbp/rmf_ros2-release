@@ -2,6 +2,7 @@
 
 import rmf_dispenser_msgs.msg as dispenser_msgs
 import rmf_ingestor_msgs.msg as ingestor_msgs
+from rmf_task_msgs.msg import TaskSummary
 
 from rclpy.node import Node
 
@@ -24,6 +25,7 @@ class Constants:
     ingestor_states_topic = 'ingestor_states'
     ingestor_requests_topic = 'ingestor_requests'
 
+    task_summary_topic = 'task_summaries'
 
 
 class MockDispenser(Node):

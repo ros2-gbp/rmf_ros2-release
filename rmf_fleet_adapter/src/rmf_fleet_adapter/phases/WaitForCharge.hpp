@@ -20,7 +20,6 @@
 
 #include "../LegacyTask.hpp"
 #include "../agv/RobotContext.hpp"
-#include "../events/internal_ReservationNodeNegotiator.hpp"
 
 #include <rmf_battery/agv/BatterySystem.hpp>
 
@@ -78,7 +77,7 @@ public:
     double _initial_battery_soc;
     double _expected_charging_rate; // % per hour
     std::shared_ptr<void> _lock_charging;
-    std::shared_ptr<reservation::ReservationNodeNegotiator> _reservation_client;
+
   };
 
   class Pending : public LegacyTask::PendingPhase

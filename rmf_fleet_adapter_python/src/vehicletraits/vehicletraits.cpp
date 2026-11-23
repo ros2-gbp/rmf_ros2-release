@@ -2,8 +2,6 @@
 #include <pybind11/eigen.h>
 #include <pybind11/stl.h>
 
-#include <memory>
-
 #include <rmf_traffic/agv/VehicleTraits.hpp>
 #include <rmf_traffic/Profile.hpp>
 
@@ -70,8 +68,7 @@ void bind_vehicletraits(py::module& m)
       &Profile::vicinity));
 
   // VEHICLETRAITS =============================================================
-  py::class_<VehicleTraits, std::shared_ptr<VehicleTraits>>(
-    m_vehicletraits, "VehicleTraits")
+  py::class_<VehicleTraits>(m_vehicletraits, "VehicleTraits")
   .def(py::init<VehicleTraits::Limits,
     VehicleTraits::Limits,
     Profile,
@@ -83,22 +80,13 @@ void bind_vehicletraits(py::module& m)
     py::arg("steering") = VehicleTraits::Differential())
   .def_property("linear",
     py::overload_cast<>(&VehicleTraits::linear, py::const_),
-    [](VehicleTraits& self, const VehicleTraits::Limits& limits)
-    {
-      self.linear() = limits;
-    })
+    py::overload_cast<>(&VehicleTraits::linear))
   .def_property("rotational",
     py::overload_cast<>(&VehicleTraits::rotational, py::const_),
-    [](VehicleTraits& self, const VehicleTraits::Limits& limits)
-    {
-      self.rotational() = limits;
-    })
+    py::overload_cast<>(&VehicleTraits::rotational))
   .def_property("profile",
     py::overload_cast<>(&VehicleTraits::profile, py::const_),
-    [](VehicleTraits& self, const Profile& profile)
-    {
-      self.profile() = profile;
-    })
+    py::overload_cast<>(&VehicleTraits::profile))
   .def_property_readonly("steering", &VehicleTraits::get_steering)
   .def_property("differential",
     py::overload_cast<>(&VehicleTraits::get_differential),

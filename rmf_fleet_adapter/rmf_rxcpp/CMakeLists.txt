@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.5.0)
 
 if (NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 14)
@@ -16,11 +16,12 @@ target_include_directories(rmf_rxcpp
   INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/RxCpp-4.1.0/Rx/v2/src
+    ${rclcpp_INCLUDE_DIRS}
 )
 target_link_libraries(rmf_rxcpp
   INTERFACE
     Threads::Threads
-    rclcpp::rclcpp
+    ${rclcpp_LIBRARIES}
 )
 
 # Issues in RMW implementations are causing spurious failures for these tests,

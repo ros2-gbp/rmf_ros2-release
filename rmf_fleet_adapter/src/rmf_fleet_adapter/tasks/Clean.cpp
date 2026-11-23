@@ -54,10 +54,6 @@ struct CleanEvent : public rmf_task_sequence::events::Placeholder::Description
     void execute(const LiftDoorOpen&) final {}
     void execute(const LiftSessionEnd&) final {}
     void execute(const LiftSessionBegin&) final {}
-    void execute(const ZonePreEntry&) final {}
-    void execute(const ZonePostEntry&) final {}
-    void execute(const ZonePreExit&) final {}
-    void execute(const ZonePostExit&) final {}
 
     std::optional<std::string> found_dock = std::nullopt;
   };
@@ -233,7 +229,7 @@ void add_clean(
     traits,
     place_deser = deserialization.place,
     consider = deserialization.consider_clean
-    ](const nlohmann::json& msg) -> DeserializedTask
+    ](const nlohmann::json& msg) -> agv::DeserializedTask
     {
       if (!consider || !(*consider))
       {
@@ -312,7 +308,7 @@ void add_clean(
   deserialization.task->add("clean", validate_clean_task, deserialize_clean);
 
   auto deserialize_clean_event =
-    [deserialize_clean](const nlohmann::json& msg) -> DeserializedEvent
+    [deserialize_clean](const nlohmann::json& msg) -> agv::DeserializedEvent
     {
       auto clean_task = deserialize_clean(msg);
       if (!clean_task.description)

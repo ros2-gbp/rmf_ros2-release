@@ -64,10 +64,7 @@ public:
   void stop();
 
   /// Submit a task request
-  void dispatch_task(
-    std::string task_id,
-    const nlohmann::json& request,
-    bool dry_run = false);
+  void dispatch_task(std::string task_id, const nlohmann::json& request);
 
   ~MockAdapter();
 

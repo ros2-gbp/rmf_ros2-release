@@ -27,6 +27,7 @@ std::atomic_bool terminate_server = false;
 std::atomic_bool timed_out = false;
 std::atomic<int> num_msgs = 0;
 std::atomic<int> num_init_msgs = 0;
+std::promise<void> on_init_promise;
 
 using namespace std::chrono_literals;
 
@@ -83,17 +84,13 @@ void run_server()
 }
 
 
-std::vector<nlohmann::json> init_function(std::optional<std::promise<void>*>& on_init_promise)
+std::vector<nlohmann::json> init_function()
 {
   nlohmann::json json;
   json["test"] = "init";
   std::vector<nlohmann::json> msgs;
   msgs.push_back(json);
-  if (on_init_promise.has_value() && (*on_init_promise))
-  {
-    (*on_init_promise)->set_value();
-    on_init_promise = std::nullopt;
-  }
+  on_init_promise.set_value();
   std::cout << "init\n";
   return msgs;
 }
@@ -107,17 +104,8 @@ TEST_CASE("Client", "Reconnecting server") {
       {
         run_server();
       });
-
-  std::promise<void> on_init_promise;
-  auto init_future = on_init_promise.get_future();
-  std::optional<std::promise<void>*> opt_on_init_promise = &on_init_promise;
   auto broadcaster = rmf_websocket::BroadcastClient::make(
-    "ws://localhost:9000/",
-    test_node,
-    [&opt_on_init_promise]()
-    {
-      return init_function(opt_on_init_promise);
-    });
+    "ws://localhost:9000/", test_node, init_function);
 
   nlohmann::json jsonString;
   jsonString["test"] = "1";
@@ -131,6 +119,8 @@ TEST_CASE("Client", "Reconnecting server") {
   REQUIRE(num_msgs == 1);
   REQUIRE(num_init_msgs == 1);
 
+  on_init_promise = std::promise<void>();
+
   auto t2 = std::thread([]()
       {
         run_server();
@@ -141,7 +131,7 @@ TEST_CASE("Client", "Reconnecting server") {
   t2.join();
 
 
-  REQUIRE_NOTHROW(init_future.wait_for(5s));
+  REQUIRE_NOTHROW(on_init_promise.get_future().wait_for(5s));
 
   REQUIRE(num_msgs == 2);
 

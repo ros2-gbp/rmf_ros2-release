@@ -90,16 +90,8 @@ std::vector<ScheduleNode::ConflictSet> get_conflicts(
   const auto& participants = viewer.participant_ids();
   for (const auto participant : participants)
   {
-    const auto itinerary_opt = viewer.get_itinerary(participant);
-    if (!itinerary_opt.has_value())
-      continue;
-    const auto itinerary = *itinerary_opt;
-
-    const auto plan_id_opt = viewer.get_current_plan_id(participant);
-    if (!plan_id_opt.has_value())
-      continue;
-    const auto plan_id = *plan_id_opt;
-
+    const auto itinerary = *viewer.get_itinerary(participant);
+    const auto plan_id = *viewer.get_current_plan_id(participant);
     const auto description = viewer.get_participant(participant);
     if (!description)
       continue;
@@ -851,7 +843,7 @@ void ScheduleNode::cull()
     std::vector<std::size_t> cull_wait;
     for (const auto& [v, wait] : active_conflicts._waiting)
     {
-      if (wait.conclusion_time + std::chrono::seconds(30) < time)
+      if (wait.conclusion_time + std::chrono::seconds(30) > time)
       {
         cull_wait.push_back(v);
       }
@@ -872,7 +864,7 @@ void ScheduleNode::cull()
       if (open.has_value())
       {
         // TODO(MXG): Make this deadline configurable
-        if (open->last_active_time + std::chrono::seconds(30) < time)
+        if (open->last_active_time + std::chrono::seconds(30) > time)
         {
           cull_negotiation.push_back(v);
         }

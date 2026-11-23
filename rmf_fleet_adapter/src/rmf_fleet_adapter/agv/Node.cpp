@@ -58,6 +58,10 @@ std::shared_ptr<Node> Node::make(
     node->create_publisher<LiftRequest>(
     AdapterLiftRequestTopicName, transient_qos);
 
+  node->_task_summary_pub =
+    node->create_publisher<TaskSummary>(
+    TaskSummaryTopicName, default_qos);
+
   node->_dispenser_request_pub =
     node->create_publisher<DispenserRequest>(
     DispenserRequestTopicName, default_qos);
@@ -72,11 +76,7 @@ std::shared_ptr<Node> Node::make(
 
   node->_emergency_notice_obs =
     node->create_observable<EmergencyNotice>(
-    rmf_traffic_ros2::EmergencyTopicName, transient_qos);
-
-  node->_target_emergency_notice_obs =
-    node->create_observable<TargetEmergencyNotice>(
-    rmf_traffic_ros2::EmergencySignalTopicName, transient_qos);
+    rmf_traffic_ros2::EmergencyTopicName, default_qos);
 
   node->_ingestor_request_pub =
     node->create_publisher<IngestorRequest>(
@@ -118,34 +118,6 @@ std::shared_ptr<Node> Node::make(
   node->_mutex_group_states_obs =
     node->create_observable<MutexGroupStates>(
     MutexGroupStatesTopicName, transient_local_qos);
-
-  node->_reservation_request_pub =
-    node->create_publisher<ReservationRequest>(
-    ReservationRequestTopicName, transient_local_qos);
-
-  node->_reservation_ticket_obs =
-    node->create_observable<ReservationTicket>(
-    ReservationResponseTopicName, transient_local_qos);
-
-  node->_reservation_claim_pub =
-    node->create_publisher<ReservationClaim>(
-    ReservationClaimTopicName, transient_local_qos);
-
-  node->_reservation_alloc_obs =
-    node->create_observable<ReservationAllocation>(
-    ReservationAllocationTopicName, transient_local_qos);
-
-  node->_reservation_release_pub =
-    node->create_publisher<ReservationRelease>(
-    ReservationReleaseTopicName, transient_local_qos);
-
-  node->_zone_request_pub =
-    node->create_publisher<ZoneRequest>(
-    ZoneRequestTopicName, transient_local_qos);
-
-  node->_general_dynamic_event_description_pub =
-    node->create_publisher<DynamicEventDescription>(
-      DynamicEventBeginTopicBase, transient_local_qos);
 
   return node;
 }
@@ -206,6 +178,12 @@ auto Node::lift_request() const -> const LiftRequestPub&
 }
 
 //==============================================================================
+auto Node::task_summary() const -> const TaskSummaryPub&
+{
+  return _task_summary_pub;
+}
+
+//==============================================================================
 auto Node::dispenser_request() const -> const DispenserRequestPub&
 {
   return _dispenser_request_pub;
@@ -228,14 +206,6 @@ auto Node::emergency_notice() const -> const EmergencyNoticeObs&
 {
   return _emergency_notice_obs->observe();
 }
-
-//==============================================================================
-auto Node::target_emergency_notice() const -> const TargetEmergencyNoticeObs&
-{
-  return _target_emergency_notice_obs->observe();
-}
-
-//==============================================================================
 
 auto Node::ingestor_request() const -> const IngestorRequestPub&
 {
@@ -288,48 +258,6 @@ auto Node::mutex_group_request_obs() const -> const MutexGroupRequestObs&
 auto Node::mutex_group_states() const -> const MutexGroupStatesObs&
 {
   return _mutex_group_states_obs->observe();
-}
-
-//==============================================================================
-auto Node::location_requester() const -> const ReservationRequestPub&
-{
-  return _reservation_request_pub;
-}
-
-//==============================================================================
-auto Node::claim_location_ticket() const -> const ReservationClaimPub&
-{
-  return _reservation_claim_pub;
-}
-
-//==============================================================================
-auto Node::location_ticket_obs() const -> const ReservationTicketObs&
-{
-  return _reservation_ticket_obs->observe();
-}
-
-//==============================================================================
-auto Node::allocated_claims_obs() const -> const ReservationAllocationObs&
-{
-  return _reservation_alloc_obs->observe();
-}
-
-//==============================================================================
-auto Node::release_location() const -> const ReservationReleasePub&
-{
-  return _reservation_release_pub;
-}
-
-//==============================================================================
-auto Node::zone_request() const -> const ZoneRequestPub&
-{
-  return _zone_request_pub;
-}
-
-//==============================================================================
-const DynamicEventDescriptionPub& Node::all_dynamic_event_descriptions() const
-{
-  return _general_dynamic_event_description_pub;
 }
 
 } // namespace agv

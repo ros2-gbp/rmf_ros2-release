@@ -26,10 +26,6 @@
 #include <rmf_fleet_adapter/StandardNames.hpp>
 
 #include <rmf_fleet_msgs/msg/mutex_group_manual_release.hpp>
-#include <rmf_zone_msgs/msg/zone_hint.hpp>
-#include <rmf_task_msgs/action/dynamic_event.hpp>
-#include <rmf_task_msgs/msg/dynamic_event_description.hpp>
-#include <rmf_task_msgs/msg/dynamic_event_status.hpp>
 
 #include <rmf_traffic/schedule/Negotiator.hpp>
 #include <rmf_traffic/schedule/Participant.hpp>
@@ -50,87 +46,18 @@
 
 #include "Node.hpp"
 #include "../Reporting.hpp"
-#include "ReservationManager.hpp"
-#include "../DeserializeJSON.hpp"
 
 #include <unordered_set>
 
-#include <rclcpp_action/rclcpp_action.hpp>
-
 namespace rmf_fleet_adapter {
-
-namespace agv {
-
-// Forward declaring for DynamicEventCallbacks
-class RobotContext;
-
-} // namespace agv
-
-//==============================================================================
-inline std::string status_to_string(rmf_task::Event::Status status)
-{
-  using Status = rmf_task::Event::Status;
-  switch (status)
-  {
-    case Status::Uninitialized:
-      return "uninitialized";
-    case Status::Blocked:
-      return "blocked";
-    case Status::Error:
-      return "error";
-    case Status::Failed:
-      return "failed";
-    case Status::Standby:
-      return "standby";
-    case Status::Underway:
-      return "underway";
-    case Status::Delayed:
-      return "delayed";
-    case Status::Skipped:
-      return "skipped";
-    case Status::Canceled:
-      return "canceled";
-    case Status::Killed:
-      return "killed";
-    case Status::Completed:
-      return "completed";
-    default:
-      return "uninitialized";
-  }
-}
 
 // Forward declaration
 class TaskManager;
 
-using DynamicEventAction = rmf_task_msgs::action::DynamicEvent;
-using DynamicEventHandle = rclcpp_action::ServerGoalHandle<DynamicEventAction>;
-using DynamicEventStatus = rmf_task_msgs::msg::DynamicEventStatus;
-using DynamicEventStatusPub = rclcpp::Publisher<DynamicEventStatus>::SharedPtr;
-
-//==============================================================================
-struct DynamicEventCallbacks {
-  std::function<void(std::shared_ptr<DynamicEventHandle>, std::shared_ptr<void>)> executor;
-  std::function<void(std::shared_ptr<DynamicEventHandle>)> cancel;
-  std::function<bool(const std::string&, const std::string&)> validator;
-  std::weak_ptr<agv::RobotContext> context;
-
-  ~DynamicEventCallbacks();
-};
-
-//==============================================================================
-inline std::shared_ptr<DynamicEventAction::Result>
-dynamic_event_execution_failure(std::string message)
-{
-  return std::make_shared<DynamicEventAction::Result>(
-    rmf_task_msgs::build<DynamicEventAction::Result>()
-      .execution_failure(std::move(message))
-      .status("")
-      .id(0));
-}
-
 namespace agv {
 
 class FleetUpdateHandle;
+class RobotContext;
 using TransformDictionary = std::unordered_map<std::string, Transformation>;
 using SharedPlanner = std::shared_ptr<
   std::shared_ptr<const rmf_traffic::agv::Planner>>;
@@ -182,27 +109,6 @@ public:
     text = "Wait";
   }
 
-  void execute(const ZonePreEntry& zone) override
-  {
-    text = "Zone " + zone.zone_name();
-  }
-
-  void execute(const ZonePostEntry& zone) override
-  {
-    text = "Zone " + zone.zone_name();
-  }
-
-  void execute(const ZonePreExit& zone) override
-  {
-    text = "Zone " + zone.zone_name();
-  }
-
-  void execute(const ZonePostExit& zone) override
-  {
-    text = "Zone " + zone.zone_name();
-  }
-
-
   void execute(const Dock& dock) override
   {
     text = "Dock " + dock.dock_name();
@@ -221,13 +127,6 @@ inline std::string print_waypoint(
 
   ss << wp.get_map_name() << " <" << wp.get_location().transpose() << "> ["
      << wp.name_or_index() << "]";
-
-  const auto& mutex = wp.in_mutex_group();
-  if (!mutex.empty())
-  {
-    ss << " [mutex: " << mutex << "]";
-  }
-
   return ss.str();
 }
 
@@ -301,13 +200,6 @@ inline std::string print_lane(
   const auto& lane = graph.get_lane(i_lane);
   ss << "lane " << i_lane << ": " << print_lane_node(lane.entry(), graph)
      << " -> " << print_lane_node(lane.exit(), graph);
-
-  const auto& mutex = lane.properties().in_mutex_group();
-  if (!mutex.empty())
-  {
-    ss << " [mutex: " << mutex  << "]";
-  }
-
   return ss.str();
 }
 
@@ -352,16 +244,10 @@ inline std::string print_starts(
 }
 
 //==============================================================================
-std::unordered_map<std::size_t, VertexStack> compute_stacked_vertices(
-  const rmf_traffic::agv::Graph& graph,
-  double max_merge_waypoint_distance);
-
-//==============================================================================
 struct NavParams
 {
   bool skip_rotation_commands;
   std::shared_ptr<TransformDictionary> transforms_to_robot_coords;
-  std::unordered_set<std::size_t> strict_lanes;
   double max_merge_waypoint_distance = 1e-3;
   double max_merge_lane_distance = 0.3;
   double min_lane_length = 1e-8;
@@ -409,12 +295,6 @@ struct NavParams
     RobotContext& context);
 
   rmf_traffic::agv::Plan::StartSet compute_plan_starts(
-    const RobotContext& context,
-    const std::string& map_name,
-    const Eigen::Vector3d position,
-    const rmf_traffic::Time start_time) const;
-
-  rmf_traffic::agv::Plan::StartSet unfiltered_compute_plan_starts(
     const rmf_traffic::agv::Graph& graph,
     const std::string& map_name,
     const Eigen::Vector3d position,
@@ -432,7 +312,7 @@ struct NavParams
         min_lane_length);
 
       if (!starts.empty())
-        return starts;
+        return process_locations(graph, starts);
     }
 
     return {};
@@ -447,8 +327,8 @@ struct NavParams
     std::optional<std::size_t> v) const;
 
   rmf_traffic::agv::Plan::StartSet process_locations(
-    rmf_traffic::agv::Plan::StartSet locations,
-    const RobotContext& context) const;
+    const rmf_traffic::agv::Graph& graph,
+    rmf_traffic::agv::Plan::StartSet locations) const;
 
   rmf_traffic::agv::Plan::StartSet _descend_stacks(
     const rmf_traffic::agv::Graph& graph,
@@ -457,12 +337,7 @@ struct NavParams
   // If one of the locations is associated with a lift vertex, filter it out if
   // the actual of the robot is outside the dimensions of the lift.
   rmf_traffic::agv::Plan::StartSet _lift_boundary_filter(
-    rmf_traffic::agv::Plan::StartSet locations,
-    const RobotContext& context) const;
-
-  // If one of the starts is mid-lane on a strict lane, filter it out of the
-  // start set.
-  rmf_traffic::agv::Plan::StartSet _strict_lane_filter(
+    const rmf_traffic::agv::Graph& graph,
     rmf_traffic::agv::Plan::StartSet locations) const;
 
   bool in_same_stack(std::size_t wp0, std::size_t wp1) const;
@@ -512,14 +387,19 @@ struct MutexGroupData
 };
 
 //==============================================================================
+struct MutexGroupSwitch
+{
+  std::string from;
+  std::string to;
+  std::function<bool()> accept;
+};
+
+//==============================================================================
 class RobotContext
   : public std::enable_shared_from_this<RobotContext>,
   public rmf_traffic::schedule::Negotiator
 {
 public:
-
-
-  uint64_t last_reservation_request_id();
 
   /// Get a handle to the command interface of the robot. This may return a
   /// nullptr if the robot has disconnected and/or its command API is no longer
@@ -543,8 +423,7 @@ public:
 
   /// This is the current "location" of the robot, which can be used to initiate
   /// a planning job
-  rmf_traffic::agv::Plan::StartSet location() const;
-  // const rmf_traffic::agv::Plan::StartSet& location() const;
+  const rmf_traffic::agv::Plan::StartSet& location() const;
 
   /// Set the current location for the robot in terms of a planner start set
   void set_location(rmf_traffic::agv::Plan::StartSet location_);
@@ -555,11 +434,6 @@ public:
 
   /// Set that the robot is currently lost
   void set_lost(std::optional<Location> location);
-
-  /// Used by certain events to lock in a specific waypoint as the current event
-  /// waypoint. This alters how the planner interprets the current start set,
-  /// focusing it in on the waypoint of the event.
-  std::shared_ptr<std::size_t> _set_current_event_waypoint(std::size_t index);
 
   /// Filter closed lanes out of the planner start set. At least one start will
   /// be retained so that the planner can offer some solution, even if all
@@ -616,14 +490,6 @@ public:
   /// Set the navigation params for this robot. This is used by EasyFullControl
   /// robots.
   void set_nav_params(std::shared_ptr<NavParams> value);
-
-  /// Check whether this robot is using a robot-specific or fleet-wide finishing
-  /// request.
-  bool robot_finishing_request() const;
-
-  /// Toggle the robot_finishing_request flag to indicate whether this robot is
-  /// using a robot-specific or fleet-wide finishing request.
-  void robot_finishing_request(bool robot_specific);
 
   class NegotiatorLicense;
 
@@ -805,12 +671,6 @@ public:
   /// Get the current lift destination request for this robot
   const LiftDestination* current_lift_destination() const;
 
-  /// Check whether the lift has arrived at its current destination with the
-  /// correct session ID
-  bool has_lift_arrived(
-    const std::string& lift_name,
-    const std::string& destination_floor) const;
-
   /// Ask for a certain lift to go to a certain destination and open the doors
   std::shared_ptr<void> set_lift_destination(
     std::string lift_name,
@@ -819,22 +679,6 @@ public:
 
   /// Indicate that the lift is no longer needed
   void release_lift();
-
-  /// Get the final lift destination that the overall session intends to end at.
-  /// This is used to give robots advanced notice of what floor they will be
-  /// going to, in case they need this information in order to enter the lift
-  /// correctly.
-  std::optional<RobotUpdateHandle::LiftDestination>
-  final_lift_destination() const;
-
-  /// Change what the final lift destination is currently set to. Typically this
-  /// should only be called by RequestLift.
-  void set_final_lift_destination(
-    RobotUpdateHandle::LiftDestination destination);
-
-  /// Clear the information about the final lift destination. Typically this
-  /// should only be called by release_lift().
-  void clear_final_lift_destination();
 
   /// Check if a door is being held
   const std::optional<std::string>& holding_door() const;
@@ -853,9 +697,7 @@ public:
     rmf_traffic::Time claim_time);
 
   /// Retain only the mutex groups listed in the set. Release all others.
-  void retain_mutex_groups(
-    const std::unordered_set<std::string>& groups,
-    const std::string& backtrace);
+  void retain_mutex_groups(const std::unordered_set<std::string>& groups);
 
   void schedule_itinerary(
     std::shared_ptr<rmf_traffic::PlanId> plan_id,
@@ -867,24 +709,6 @@ public:
     rmf_traffic::Duration wait,
     Eigen::Vector3d position,
     const std::string& map);
-
-  /// If the robot is inside a lift, this will indicate what level the lift is
-  /// currently on. This will be used for filtering out start points for the
-  /// planner.
-  std::shared_ptr<const std::string> current_boarded_lift_level() const;
-
-  /// This should only be set in RequestLift.cpp when the robot is doing a lift
-  /// request from the inside.
-  void _set_current_boarded_lift_level(
-    std::shared_ptr<const std::string> lift_level);
-
-  /// The last reported location of the robot, as given by the EasyFullControl
-  /// API
-  std::shared_ptr<const Location> reported_location() const;
-
-  /// Set the shared reference for the reported location. This should only be
-  /// called once while initializing a new EasyFullControl robot.
-  void _set_reported_location(std::shared_ptr<const Location> value);
 
   /// Set the task manager for this robot. This should only be called in the
   /// TaskManager::make function.
@@ -907,54 +731,6 @@ public:
 
   /// Release a door. This should only be used by DoorClose
   void _release_door(const std::string& door_name);
-
-  /// This should only be called by RequestLift to notify the context that the
-  /// lift successfully arrived for its current destination request.
-  void _set_lift_arrived(
-    const std::string& lift_name,
-    const std::string& destination_name);
-
-  /// Set an allocated destination.
-  void _set_allocated_destination(
-    const rmf_reservation_msgs::msg::ReservationAllocation&);
-
-  /// Cancel allocated destination
-  void _cancel_allocated_destination();
-
-  /// Get last reserved location. Empty string if not reserved.
-  std::string _get_reserved_location();
-
-  /// Set if the parking spot manager is used or not
-  void _set_parking_spot_manager(const bool enabled);
-
-  /// Find all available spots. Order based on current location.
-  /// \param[in] same_floor - if the parking spots should be on the same floor.
-  std::vector<rmf_traffic::agv::Planner::Goal>
-  _find_and_sort_parking_spots(const bool same_floor)
-  const;
-
-  /// Find all available parking sports. Order based on goal.
-  /// \param[in] same_floor - if the parking spots should be on the same floor.
-  std::vector<rmf_traffic::agv::Planner::Goal>
-  _find_and_sort_parking_spots(
-    const rmf_traffic::agv::Plan::Goal& dest, const bool same_floor)
-  const;
-
-  /// Set if the parking spot manager is used or not
-  bool _parking_spot_manager_enabled();
-
-  /// Does the parking spot have a ticket?
-  bool _has_ticket() const;
-
-  /// Announce that a dynamic event is beginning. This provides the sequence
-  /// number for dynamic event. This should only be used by DynamicEvent.
-  uint32_t _begin_dynamic_event(
-    std::string description,
-    std::shared_ptr<DynamicEventCallbacks> callbacks);
-
-  void _publish_dynamic_event_status(
-    rmf_task::Event::State::Status status,
-    uint64_t id);
 
   template<typename... Args>
   static std::shared_ptr<RobotContext> make(Args&&... args)
@@ -1020,100 +796,10 @@ public:
           self->_handle_mutex_group_manual_release(*msg);
       });
 
-    context->_reservation_mgr._context = context;
-
-    context->_initialize_dynamic_event_server();
-
     return context;
   }
 
   bool debug_positions = false;
-
-  /// The hints an on-going GoToZone is expressing for a zone, most preferred
-  /// first. Each says where to park, and facing which way.
-  using ZonePreference = std::vector<rmf_zone_msgs::msg::ZoneHint>;
-  using ZonePreferenceHandle = std::shared_ptr<const ZonePreference>;
-
-  /// Set the preference for a zone and return the handle that owns it. It
-  /// applies for as long as the caller holds that handle, and no longer.
-  [[nodiscard]] ZonePreferenceHandle set_zone_preference(
-    std::string zone_name,
-    ZonePreference preference);
-
-  /// Get the preference currently expressed for this zone, or nullptr.
-  ZonePreferenceHandle zone_preference(const std::string& zone_name) const;
-
-  /// The zone manager's grant of one vertex to this robot. Shared, so the
-  /// context holds one reference and any event using it holds another.
-  struct ZoneBooking
-  {
-    std::string zone_name;
-    std::string waypoint_name;
-    rmf_traffic::agv::Plan::Goal goal;
-    std::string granted_under_request_id;
-  };
-
-  using ZoneBookingPtr = std::shared_ptr<ZoneBooking>;
-
-  /// Set the booking for a zone, replacing any already held for that zone.
-  void set_zone_booking(
-    std::string zone_name,
-    std::string waypoint_name,
-    rmf_traffic::agv::Plan::Goal goal,
-    std::string request_id);
-
-  /// Get the booking held for a zone, or nullptr
-  ZoneBookingPtr zone_booking(const std::string& zone_name) const;
-
-  /// What to do with a zone booking's reservation ticket when the booking is
-  /// cleared.
-  enum class ZoneTicketDisposal
-  {
-    /// Keep the vertex reserved and let the zone manager take it back, so it
-    /// stays in that zone's pool for the next robot.
-    HandBack,
-
-    /// Give the vertex back to the reservation node.
-    Release
-  };
-
-  /// Release the booking held for a zone
-  void clear_zone_booking(
-    const std::string& zone_name,
-    ZoneTicketDisposal disposal);
-
-  /// Get whether this robot holds any zone booking at all
-  bool has_zone_bookings() const;
-
-  /// Take over a reservation ticket the zone manager was holding for us.
-  /// Nothing is released, so the vertex never looks free for an instant, and
-  /// the reservation negotiator short-circuits instead of asking for it again.
-  ///
-  /// \param[in] ticket_id
-  ///   The live ticket currently holding the vertex.
-  ///
-  /// \param[in] resource
-  ///   The vertex the ticket holds, by name.
-  ///
-  /// \param[in] release_previous
-  ///   Whether to give our current ticket back to the reservation node.
-  void _adopt_zone_ticket(
-    uint64_t ticket_id,
-    const std::string& resource,
-    bool release_previous = true);
-
-  /// Get whether a zone manager is listening for our zone requests.
-  bool _zone_manager_listening() const;
-
-  /// The zone whose booking sits on this waypoint, if any. Says whether a
-  /// reservation we are about to displace belongs to a zone we still hold,
-  /// which the ticket alone cannot.
-  std::optional<std::string> zone_holding_waypoint(
-    const std::string& waypoint_name) const;
-
-  /// Visit every booking no event is using.
-  void for_each_releasable_booking(
-    const std::function<void(const ZoneBooking&)>& fn) const;
 
 private:
 
@@ -1133,15 +819,6 @@ private:
     std::shared_ptr<const rmf_task::TaskPlanner> task_planner);
 
   std::weak_ptr<RobotCommandHandle> _command_handle;
-
-  /// If an event is taking place at a waypoint, this field will be set with the
-  /// value of that waypoint. As long as this is set, any replan will use this
-  /// waypoint as its starting point instead of _location.
-  ///
-  /// This is used by LockMutexGroup to prevent deadlocks that could arise from
-  /// the planner chosing to start from a different Plan::Start element that
-  /// requires some other mutex to also be locked before proceeding.
-  std::weak_ptr<std::size_t> _current_event_waypoint;
   std::vector<rmf_traffic::agv::Plan::Start> _location;
   std::vector<rmf_traffic::agv::Plan::Start> _most_recent_valid_location;
   rmf_traffic::schedule::Participant _itinerary;
@@ -1187,15 +864,6 @@ private:
     std::make_unique<std::mutex>();
   std::shared_ptr<const rmf_task::TaskPlanner> _task_planner;
   std::weak_ptr<TaskManager> _task_manager;
-  bool _robot_finishing_request = false;
-
-  // Keyed by zone name
-  std::unordered_map<std::string, ZoneBookingPtr> _zone_bookings;
-
-  // Weak on purpose: the event expressing the preference owns it, and its
-  // death is what ends it.
-  std::unordered_map<std::string, std::weak_ptr<const ZonePreference>>
-  _zone_preferences;
 
   RobotUpdateHandle::Unstable::Watchdog _lift_watchdog;
   rmf_traffic::Duration _lift_rewait_duration = std::chrono::seconds(0);
@@ -1204,9 +872,6 @@ private:
   RobotUpdateHandle::Commission _commission;
   bool _emergency = false;
   EasyFullControl::LocalizationRequest _localize;
-
-  std::shared_ptr<const Location> _reported_location;
-  std::weak_ptr<const std::string> _current_boarded_lift_level;
 
   // Mode value for RobotMode message
   uint32_t _current_mode;
@@ -1234,11 +899,8 @@ private:
   void _check_mutex_groups(const rmf_fleet_msgs::msg::MutexGroupStates& states);
   void _retain_mutex_groups(
     const std::unordered_set<std::string>& retain,
-    std::unordered_map<std::string, TimeMsg>& _groups,
-    const std::string& backtrace);
-  void _release_mutex_group(
-    const MutexGroupData& data,
-    const std::string& backtrace) const;
+    std::unordered_map<std::string, TimeMsg>& _groups);
+  void _release_mutex_group(const MutexGroupData& data) const;
   void _publish_mutex_group_requests();
   void _handle_mutex_group_manual_release(
     const rmf_fleet_msgs::msg::MutexGroupManualRelease& msg);
@@ -1251,22 +913,6 @@ private:
   rclcpp::Subscription<rmf_fleet_msgs::msg::MutexGroupManualRelease>::SharedPtr
     _mutex_group_manual_release_sub;
   std::chrono::steady_clock::time_point _last_active_task_time;
-
-  uint64_t _last_reservation_request_id;
-  ReservationManager _reservation_mgr;
-  bool _use_parking_spot_reservations;
-
-  std::optional<RobotUpdateHandle::LiftDestination> _final_lift_destination;
-  std::unique_ptr<std::mutex> _final_lift_destination_mutex =
-    std::make_unique<std::mutex>();
-
-  void _initialize_dynamic_event_server();
-  std::weak_ptr<DynamicEventCallbacks> _dynamic_event_callbacks;
-  std::weak_ptr<rclcpp_action::GoalUUID> _dynamic_event_goal;
-  DynamicEventDescriptionPub _individual_dynamic_event_description_pub;
-  DynamicEventStatusPub _dynamic_event_status_pub;
-  uint32_t _dynamic_event_seq;
-  rclcpp_action::Server<DynamicEventAction>::SharedPtr _dynamic_event_server;
 };
 
 using RobotContextPtr = std::shared_ptr<RobotContext>;

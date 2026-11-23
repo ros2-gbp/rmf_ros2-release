@@ -35,66 +35,60 @@ ProgressEvaluator::ProgressEvaluator(
 }
 
 //==============================================================================
-bool ProgressEvaluator::initialize(std::shared_ptr<const Planning> setup)
+bool ProgressEvaluator::initialize(const Result& setup)
 {
-  if (!best_estimate.planning)
-  {
-    // Ensure that we always have something for a best estimate
-    best_estimate.planning = setup;
-  }
-
-  if (!setup->progress().cost_estimate())
+  if (!setup.cost_estimate())
   {
     return false;
   }
 
-  const double cost = *setup->progress().cost_estimate();
+  const double cost = *setup.cost_estimate();
   if (cost < best_estimate.cost)
   {
-    best_estimate = Info{cost, setup};
+    best_estimate = Info{cost, &setup};
   }
 
   return true;
 }
 
 //==============================================================================
-bool ProgressEvaluator::evaluate(std::shared_ptr<Planning> planning)
+bool ProgressEvaluator::evaluate(Result& progress)
 {
-  if (!planning->progress().success() && !planning->progress().cost_estimate())
+  if (!progress.success() && !progress.cost_estimate())
   {
     ++finished_count;
     return false;
   }
 
-  const double cost = planning->progress().success() ?
-    planning->progress()->get_cost() : *planning->progress().cost_estimate();
+  const double cost = progress.success() ?
+    progress->get_cost() : *progress.cost_estimate();
 
-  if (planning->progress().success())
+  if (progress.success())
   {
     if (cost < best_result.cost)
     {
-      best_result = Info{cost, planning};
+      best_result = Info{cost, &progress};
     }
   }
 
   if (cost < second_best_estimate.cost)
   {
-    second_best_estimate = Info{cost, planning};
+    second_best_estimate = Info{cost, &progress};
   }
 
-  if (best_estimate.planning == planning)
+  if (best_estimate.progress == &progress)
   {
     best_estimate = second_best_estimate;
     second_best_estimate = Info();
   }
 
-  if (planning->progress().saturated())
+  if (progress.saturated())
   {
     ++finished_count;
     return false;
   }
 
-  if (planning->progress().disconnected())
+  if (progress.disconnected())
   {
     ++finished_count;
     return false;
@@ -102,23 +96,23 @@ bool ProgressEvaluator::evaluate(std::shared_ptr<Planning> planning)
 
   const double dropdead_cost =
     std::min(
-    planning->progress().ideal_cost().value() + max_cost_threshold,
-    compliant_leeway_multiplier* planning->progress().ideal_cost().value()
+    progress.ideal_cost().value() + max_cost_threshold,
+    compliant_leeway_multiplier*progress.ideal_cost().value()
     + compliant_leeway_base);
 
   const bool giveup = dropdead_cost <= cost;
-  if (!planning->progress().success() && !giveup)
+  if (!progress.success() && !giveup)
   {
-    if (!best_result.planning)
+    if (!best_result.progress)
     {
-      planning->progress().options().maximum_cost_estimate(
+      progress.options().maximum_cost_estimate(
         std::min(estimate_leeway * cost, dropdead_cost));
 
       return true;
     }
     else if (cost < best_result.cost)
     {
-      planning->progress().options().maximum_cost_estimate(
+      progress.options().maximum_cost_estimate(
         std::min(best_result.cost, dropdead_cost));
       return true;
     }
@@ -129,19 +123,19 @@ bool ProgressEvaluator::evaluate(std::shared_ptr<Planning> planning)
 }
 
 //==============================================================================
-void ProgressEvaluator::discard(std::shared_ptr<Planning> planning)
+void ProgressEvaluator::discard(Result& progress)
 {
-  if (best_estimate.planning == planning)
+  if (best_estimate.progress == &progress)
   {
     best_estimate = second_best_estimate;
     second_best_estimate = Info();
   }
 
-  const double cost = planning->progress().cost_estimate() ?
-    *planning->progress().cost_estimate() : std::numeric_limits<double>::infinity();
-  if (best_discarded.planning || cost < best_discarded.cost)
+  const double cost = progress.cost_estimate() ?
+    *progress.cost_estimate() : std::numeric_limits<double>::infinity();
+  if (best_discarded.progress || cost < best_discarded.cost)
   {
-    best_discarded = Info{cost, planning};
+    best_discarded = Info{cost, &progress};
   }
 
   ++finished_count;

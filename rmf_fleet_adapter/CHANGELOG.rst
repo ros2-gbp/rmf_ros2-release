@@ -2,170 +2,31 @@
 Changelog for package rmf_fleet_adapter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.15.0 (2026-11-13)
--------------------
-* Document runtime_error thrown by add_robot when no charger is reachable (`#579 <https://github.com/open-rmf/rmf_ros2/issues/579>`_)
-  Closes `#553 <https://github.com/open-rmf/rmf_ros2/issues/553>`_
-  ---------
-  Co-authored-by: Grey <mxgrey@intrinsic.ai>
-  Co-authored-by: Aaron Chong <aaronchongth@gmail.com>
-* fix old cmake target for websocket and update other cmake vars (`#580 <https://github.com/open-rmf/rmf_ros2/issues/580>`_)
-* Keep the boarded destination when re-summoning a lift after a replan (`#556 <https://github.com/open-rmf/rmf_ros2/issues/556>`_)
-  ---------
-  Co-authored-by: Grey <mxgrey@intrinsic.ai>
-* Add GoToZone feature (`#516 <https://github.com/open-rmf/rmf_ros2/issues/516>`_)
-  Co-authored-by: kjchee <keai_jiang_chee@cgh.com.sg>
-  Co-authored-by: Loke Ji Xian <loke_ji_xian@cgh.com.sg>
-  Co-authored-by: Tey Leong Teck <leong_teck_tey@cgh.com.sg>
-  Co-authored-by: Michael X. Grey <mxgrey@intrinsic.ai>
-* bump cmake version (`#570 <https://github.com/open-rmf/rmf_ros2/issues/570>`_)
-* Fix typos in docs, launch args, log messages and comments (`#568 <https://github.com/open-rmf/rmf_ros2/issues/568>`_)
-  Co-authored-by: Mosiwon <Lots-ninety-nine@users.noreply.github.com>
-* fix(mutex): compare full claim_time instead of nanosec only (`#551 <https://github.com/open-rmf/rmf_ros2/issues/551>`_)
-  Co-authored-by: Grey <mxgrey@intrinsic.ai>
-* Contributors: Aaron Chong, Arjo Chakravarty, Mosiwon, chart, h-wata
-
-2.14.0 (2026-09-26)
--------------------
-* Support both JSON schema validator target names in rmf_fleet_adapter (`#558 <https://github.com/open-rmf/rmf_ros2/issues/558>`_)
-  `#541 <https://github.com/open-rmf/rmf_ros2/issues/541>`_ added a fallback for installations that export the validator as
-  nlohmann_json_schema_validator instead of
-  nlohmann_json_schema_validator::validator, but applied it only to
-  rmf_task_ros2 and rmf_websocket. rmf_fleet_adapter links the same
-  library and still hardcodes the namespaced name, so on those
-  installations its CMake generate step fails with "Target ... links to
-  nlohmann_json_schema_validator::validator but the target was not found".
-  Apply the same pattern used by rmf_websocket, covering both the library
-  and the BUILD_TESTING target.
+2.7.3 (2026-11-23)
+------------------
+* Checks idle behavior before executing emergency charge (`#512 <https://github.com/open-rmf/rmf_ros2/issues/512>`_)
+* Retreat to charger if there will not be enough charge for the next task (`#423 <https://github.com/open-rmf/rmf_ros2/issues/423>`_)
 * Fix phase key for skip requests (`#543 <https://github.com/open-rmf/rmf_ros2/issues/543>`_)
-  Generated-by: OpenAI Codex (GPT-5)
-  Co-authored-by: Igor Stadnyk <fallenmi@users.noreply.github.com>
-* Submit bid as long as fleet name exists (in string or array) (`#534 <https://github.com/open-rmf/rmf_ros2/issues/534>`_)
 * Add missing include to unordered_set (`#535 <https://github.com/open-rmf/rmf_ros2/issues/535>`_)
 * Fix EasyTrafficLight publish fleet state (`#525 <https://github.com/open-rmf/rmf_ros2/issues/525>`_)
 * Fix cumulative delay calculation in EasyTrafficLight (`#524 <https://github.com/open-rmf/rmf_ros2/issues/524>`_)
-* Clean up LegacyPhaseShim subscription after task_summaries removal (`#511 <https://github.com/open-rmf/rmf_ros2/issues/511>`_)
-  Co-authored-by: Grey <mxgrey@intrinsic.ai>
-* Contributors: Grey, Igor Stadnyk, Leong Teck, Luca Della Vedova, Matthew Wong, Mosiwon, h-wata, jixiancgh, kj
-
-2.13.0 (2026-06-15)
--------------------
-* Migrate to ROS Lyrical (`#520 <https://github.com/open-rmf/rmf_ros2/issues/520>`_)
-* Fix descrption typo in robot_state_aggregator launch file (`#521 <https://github.com/open-rmf/rmf_ros2/issues/521>`_)
-  Co-authored-by: Lots-ninety-nine <261080291+Lots-ninety-nine@users.noreply.github.com>
-* Make expected_finish_state reflect cumulative delay, plus frustration penalty (`#518 <https://github.com/open-rmf/rmf_ros2/issues/518>`_)
-* Resolve compilation warnings (`#514 <https://github.com/open-rmf/rmf_ros2/issues/514>`_)
-  * resolve compilation warnings
-  * more deprecated changes
-  * differentiate deprecated
-  * capture only one variable for cumulative delay
-  * revert string literal
-  ---------
-* Checks idle behavior before executing emergency charge (`#512 <https://github.com/open-rmf/rmf_ros2/issues/512>`_)
-  * check idle behaviors when considering emergency charge
-  * check for label
-  ---------
-* emit completion legacy state if lift is already on the level (`#510 <https://github.com/open-rmf/rmf_ros2/issues/510>`_)
-* Fix potential deadlocks from execution of mutex lock and release (`#490 <https://github.com/open-rmf/rmf_ros2/issues/490>`_)
-  * Fix mutex lock placement within execution
-  * Clean up debug code
-  * Introduce the concept of a current event waypoint
-  * Set current_event_waypoint during mutex lock event
-  * Debugging
-  * Eliminate undefined behavior from RobotContext::location change
-  * Finish debugging
-  * Set orientation based on location update
-* Contributors: Aaron Chong, kj, Grey, Mosiwon
-
-2.12.0 (2026-02-23)
--------------------
-* Fix dispatch command acknowledgment message publishing (`#508 <https://github.com/open-rmf/rmf_ros2/issues/508>`_)
-* Publish WaitForCharge phase completed (`#502 <https://github.com/open-rmf/rmf_ros2/issues/502>`_)
-* Choose nearest parking spot for "park" idle behavior (`#495 <https://github.com/open-rmf/rmf_ros2/issues/495>`_)
-* enable path replanning during emergency pull over (`#500 <https://github.com/open-rmf/rmf_ros2/issues/500>`_)
-* Fix parking spot selection for one-way lanes (`#499 <https://github.com/open-rmf/rmf_ros2/issues/499>`_)
-* Customizable weights for task assignment cost (`#466 <https://github.com/open-rmf/rmf_ros2/issues/466>`_)
-* Accurate GoToPlace task update and reservation fixes (`#498 <https://github.com/open-rmf/rmf_ros2/issues/498>`_)
-* Attempt to fix the spam generated by false completion of a task during detours in GoToPlace (`#491 <https://github.com/open-rmf/rmf_ros2/issues/491>`_)
+* Revert "Backport to jazzy (`#546 <https://github.com/open-rmf/rmf_ros2/issues/546>`_)"
+* Backport to jazzy (`#546 <https://github.com/open-rmf/rmf_ros2/issues/546>`_)
+  * Fix cumulative delay calculation in EasyTrafficLight (`#524 <https://github.com/open-rmf/rmf_ros2/issues/524>`_)
+  * Fix EasyTrafficLight publish fleet state (`#525 <https://github.com/open-rmf/rmf_ros2/issues/525>`_)
+  * Fix spelling: occured -> occurred in rmf_websocket exception logs (`#533 <https://github.com/open-rmf/rmf_ros2/issues/533>`_)
+  * Add missing include to unordered_set (`#535 <https://github.com/open-rmf/rmf_ros2/issues/535>`_)
+  * Set schedule node ID when changes are explicitly requested (`#538 <https://github.com/open-rmf/rmf_ros2/issues/538>`_)
+* Merge pull request `#496 <https://github.com/open-rmf/rmf_ros2/issues/496>`_ from open-rmf/backport/494-to-jazzy
+  Backport `#494 <https://github.com/open-rmf/rmf_ros2/issues/494>`_ to jazzy
 * Fix double coordinate transformation of robot position during action execution (`#494 <https://github.com/open-rmf/rmf_ros2/issues/494>`_)
-* Removed /task_summaries publishers from rmf_fleet_adapter (`#487 <https://github.com/open-rmf/rmf_ros2/issues/487>`_)
-* Makes sure that the reservation system always assigns nearest goal during Emergency Pullover (`#484 <https://github.com/open-rmf/rmf_ros2/issues/484>`_)
-* Remove cancel method from ReservationManager (`#483 <https://github.com/open-rmf/rmf_ros2/issues/483>`_)
-* Fix race condition crash in estimate_path_traveling (`#486 <https://github.com/open-rmf/rmf_ros2/issues/486>`_)
-* add return (`#480 <https://github.com/open-rmf/rmf_ros2/issues/480>`_)
-* Implement rule of five for on_error_notification (`#476 <https://github.com/open-rmf/rmf_ros2/issues/476>`_)
-* Fix tool_power_drain bug (`#474 <https://github.com/open-rmf/rmf_ros2/issues/474>`_)
-* feature/Add start_at_departure flag for GoToPlace (`#467 <https://github.com/open-rmf/rmf_ros2/issues/467>`_)
-* handling of task_api_requests on active task during emergency pullover (`#465 <https://github.com/open-rmf/rmf_ros2/issues/465>`_)
-* Retreat to charger if there will not be enough charge for the next task (`#423 <https://github.com/open-rmf/rmf_ros2/issues/423>`_)
-* Fix mutex group erasure bug in _retain_mutex_groups (`#473 <https://github.com/open-rmf/rmf_ros2/issues/473>`_)
-* Fix interrupter for compliant path planning (`#470 <https://github.com/open-rmf/rmf_ros2/issues/470>`_)
-* Remove potential data races (`#464 <https://github.com/open-rmf/rmf_ros2/issues/464>`_)
-* Fix recharge state of charge validation in set_task_planner_params (`#469 <https://github.com/open-rmf/rmf_ros2/issues/469>`_)
+* Merge pull request `#459 <https://github.com/open-rmf/rmf_ros2/issues/459>`_ from sauk2/ws-backport-to-jazzy
+  Backporting BroadcastServer improvements to Jazzy
 * Added RCL logging for BroadcastServer (`#458 <https://github.com/open-rmf/rmf_ros2/issues/458>`_)
-* Clear planner inner cache planner cache size check timer (`#454 <https://github.com/open-rmf/rmf_ros2/issues/454>`_)
-* Contributors: Adharsh Venkatachalam, Arjo Chakravarty, Cheng-Wei Chen, Grey, Leong Teck, Saurabh Kamat, Xiyu, cheriehu, cwrx777, kj, yadunund, yutaroha
+* Backport EasyFullControl behavior fixes to jazzy (`#446 <https://github.com/open-rmf/rmf_ros2/issues/446>`_)
+* Contributors: Aaron Chong, Arjo Chakravarty, Grey, Igor Stadnyk, Luca Della Vedova, Saurabh Kamat, jixiancgh, kj, yutaroha
 
-2.11.1 (2025-07-21)
--------------------
-* Fix a race condition that can cause an endless loop when waiting for a lift (`#449 <https://github.com/open-rmf/rmf_ros2/issues/449>`_)
-* Fix orientation mismatch when !skip_rotation_commands (`#422 <https://github.com/open-rmf/rmf_ros2/issues/422>`_)
-* Migrate fleet_adapter to target_link_libraries (`#438 <https://github.com/open-rmf/rmf_ros2/issues/438>`_)
-* Contributors: Grey, Luca Della Vedova
-
-2.11.0 (2025-06-09)
--------------------
-
-2.10.1 (2025-05-13)
--------------------
-* Add dependency on rclcpp_action (`#431 <https://github.com/open-rmf/rmf_ros2/issues/431>`_)
-
-2.10.0 (2025-05-09)
--------------------
-* Add a timer to log the size of planner caches (`#427 <https://github.com/open-rmf/rmf_ros2/issues/427>`_)
-* Fix goal orientation constraint (`#426 <https://github.com/open-rmf/rmf_ros2/issues/426>`_)
-* Log reason for rejecting dynamic event goals (`#419 <https://github.com/open-rmf/rmf_ros2/issues/419>`_)
-* Completely Excise Reservation Cancellation pathways (`#416 <https://github.com/open-rmf/rmf_ros2/issues/416>`_)
-* Reduce churn in lift supervisor (`#418 <https://github.com/open-rmf/rmf_ros2/issues/418>`_)
-* Dynamic Event Action Server (`#410 <https://github.com/open-rmf/rmf_ros2/issues/410>`_)
-* Improve arrival time predictions for lanes with speed limits (`#400 <https://github.com/open-rmf/rmf_ros2/issues/400>`_)
-* Ensure correct docking orientation (`#414 <https://github.com/open-rmf/rmf_ros2/issues/414>`_)
-* Direct robot task request estimation feature (`#408 <https://github.com/open-rmf/rmf_ros2/issues/408>`_)
-* Giving options to separate fire alarm by fleet names (`#413 <https://github.com/open-rmf/rmf_ros2/issues/413>`_)
-* Update documentation for RobotCommandHandle (`#409 <https://github.com/open-rmf/rmf_ros2/issues/409>`_)
-* Remove bad optional access (`#406 <https://github.com/open-rmf/rmf_ros2/issues/406>`_)
-* Fix potential issues around tasks starting (`#403 <https://github.com/open-rmf/rmf_ros2/issues/403>`_)
-* Fix the criteria for replanning (`#405 <https://github.com/open-rmf/rmf_ros2/issues/405>`_)
-* Do not update assignments if bid notice is for a dry run (`#401 <https://github.com/open-rmf/rmf_ros2/issues/401>`_)
-* Use unique name for exported targets and avoid exporting binary targets (`#396 <https://github.com/open-rmf/rmf_ros2/issues/396>`_)
-* Do not skip waypoint if orientation is not aligned (`#398 <https://github.com/open-rmf/rmf_ros2/issues/398>`_)
-* Contributors: Arjo Chakravarty, Chen Bainian, Cheng-Wei Chen, Grey, Jun, Luca Della Vedova, Xiyu, lkw303, yadunund
-
-2.9.0 (2024-11-27)
-------------------
-* Add reached API to read-only fleet adapter (`#387 <https://github.com/open-rmf/rmf_ros2/issues/387>`_)
-* Fix lift disruption issue (`#393 <https://github.com/open-rmf/rmf_ros2/issues/393>`_)
-* Allow automatic action cancellation to be toggled (`#392 <https://github.com/open-rmf/rmf_ros2/issues/392>`_)
-* Adds a simple parking spot management system.  (`#325 <https://github.com/open-rmf/rmf_ros2/issues/325>`_)
-* Publish fleet and task updates over ROS 2 if websocket is not provided (`#383 <https://github.com/open-rmf/rmf_ros2/issues/383>`_)
-* Allow robot-specific finishing request and specify parking spots (`#379 <https://github.com/open-rmf/rmf_ros2/issues/379>`_)
-* Issue relocalization command if the robot is on the wrong map (`#316 <https://github.com/open-rmf/rmf_ros2/issues/316>`_)
-* set request_time in lift end session request. (`#385 <https://github.com/open-rmf/rmf_ros2/issues/385>`_)
-* Update _last_active_task_time if robot is executing task (`#384 <https://github.com/open-rmf/rmf_ros2/issues/384>`_)
-* Populate `Booking.Priority`, added schema to validate `Priority` (`#381 <https://github.com/open-rmf/rmf_ros2/issues/381>`_)
-* Emergency trigger to use transient local qos (`#341 <https://github.com/open-rmf/rmf_ros2/issues/341>`_)
-* Add a timeout before automatically releasing lift (`#369 <https://github.com/open-rmf/rmf_ros2/issues/369>`_)
-* Configure strict lanes (`#367 <https://github.com/open-rmf/rmf_ros2/issues/367>`_)
-* Only fail on_cancel deserializations when none of the activities are possible (`#378 <https://github.com/open-rmf/rmf_ros2/issues/378>`_)
-* Fix a minor typo in fleet adapter error log (`#307 <https://github.com/open-rmf/rmf_ros2/issues/307>`_)
-* Provide an API that says the robot's lift destination (`#376 <https://github.com/open-rmf/rmf_ros2/issues/376>`_)
-* Populate LiftProperties for Destination in localize callbacks (`#373 <https://github.com/open-rmf/rmf_ros2/issues/373>`_)
-* Revert "Event based lift / door logic (`#320 <https://github.com/open-rmf/rmf_ros2/issues/320>`_)" (`#372 <https://github.com/open-rmf/rmf_ros2/issues/372>`_)
-* Update with new RobotMode field (`#345 <https://github.com/open-rmf/rmf_ros2/issues/345>`_)
-* Quiet cancel API (`#357 <https://github.com/open-rmf/rmf_ros2/issues/357>`_)
-* Contributors: Aaron Chong, Arjo Chakravarty, Grey, Luca Della Vedova, Xiyu, cwrx777
-
-2.8.0 (2024-06-12)
+2.7.2 (2024-06-18)
 ------------------
 
 2.7.1 (2024-06-11)

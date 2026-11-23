@@ -2,79 +2,10 @@
 Changelog for package rmf_fleet_adapter_python
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.15.0 (2026-11-13)
--------------------
-* fix old cmake target for websocket and update other cmake vars (`#580 <https://github.com/open-rmf/rmf_ros2/issues/580>`_)
-* Add GoToZone feature (`#516 <https://github.com/open-rmf/rmf_ros2/issues/516>`_)
-  Co-authored-by: kjchee <keai_jiang_chee@cgh.com.sg>
-  Co-authored-by: Loke Ji Xian <loke_ji_xian@cgh.com.sg>
-  Co-authored-by: Tey Leong Teck <leong_teck_tey@cgh.com.sg>
-  Co-authored-by: Michael X. Grey <mxgrey@intrinsic.ai>
-* Setting a std::stared_ptr in the VehicleTraits in order to preserve shared ownership with the fleet configuration. (`#574 <https://github.com/open-rmf/rmf_ros2/issues/574>`_)
-* bump cmake version (`#570 <https://github.com/open-rmf/rmf_ros2/issues/570>`_)
-* Fix VehicleTraits linear, rotational and profile setters (`#561 <https://github.com/open-rmf/rmf_ros2/issues/561>`_)
-  The Python setters for these properties were bound to the non-const
-  getters, which take no value, so assigning to them always raised
-  TypeError. Assign through the reference accessors instead and add a
-  unit test. This covers the ones missed in `#540 <https://github.com/open-rmf/rmf_ros2/issues/540>`_.
-  Co-authored-by: Mosiwon <Lots-ninety-nine@users.noreply.github.com>
-* Contributors: Aaron Chong, Francesco Fallica, Mosiwon, chart
-
-2.14.0 (2026-09-26)
--------------------
-* Fix pybind property setters that ignored assigned values (`#539 <https://github.com/open-rmf/rmf_ros2/issues/539>`_) (`#540 <https://github.com/open-rmf/rmf_ros2/issues/540>`_)
-* Add Python binding for RobotUpdateHandle::release_lift (`#536 <https://github.com/open-rmf/rmf_ros2/issues/536>`_)
-  Add a Python binding for the existing RobotUpdateHandle::release_lift() API.
-  Python fleet adapters can inspect the current lift destination, but currently cannot explicitly release a held lift session. This binding allows Python integrations to use the same recovery API that is already available in C++.
-  This PR only adds the missing binding and does not change the existing lift behavior.
-  Co-authored-by: Grey <mxgrey@intrinsic.ai>
-* Contributors: Grey, Jeremy McKeehen, h-wata
-
-2.13.0 (2026-06-15)
--------------------
-* Migrate to ROS Lyrical (`#520 <https://github.com/open-rmf/rmf_ros2/issues/520>`_)
-* Resolve compilation warnings (`#514 <https://github.com/open-rmf/rmf_ros2/issues/514>`_)
-  * resolve compilation warnings
-  * more deprecated changes
-  * differentiate deprecated
-  * capture only one variable for cumulative delay
-  * revert string literal
-  ---------
-* Contributors: Aaron Chong, Grey
-
-2.12.0 (2026-02-23)
--------------------
-* Removed /task_summaries publishers from rmf_fleet_adapter (`#487 <https://github.com/open-rmf/rmf_ros2/issues/487>`_)
-* Contributors: cheriehu
-
-2.11.1 (2025-07-21)
--------------------
-* Remove pybind11 vendored dependencies (`#444 <https://github.com/open-rmf/rmf_ros2/issues/444>`_)
-* Add a check for numpy version (`#451 <https://github.com/open-rmf/rmf_ros2/pull/451>`_)
-* Contributors: Luca Della Vedova, Arjo Chakravarty
-
-2.11.0 (2025-06-09)
--------------------
-
-2.10.1 (2025-05-13)
--------------------
-
-2.10.0 (2025-05-09)
--------------------
-* Add a timer to log the size of planner caches (`#427 <https://github.com/open-rmf/rmf_ros2/issues/427>`_)
-* Do not update assignments if bid notice is for a dry run (`#401 <https://github.com/open-rmf/rmf_ros2/issues/401>`_)
-* Contributors: Grey, yadunund
-
-2.9.0 (2024-11-27)
+2.7.3 (2026-11-23)
 ------------------
-* Allow automatic action cancellation to be toggled (`#392 <https://github.com/open-rmf/rmf_ros2/issues/392>`_)
-* Adds a simple parking spot management system.  (`#325 <https://github.com/open-rmf/rmf_ros2/issues/325>`_)
-* Allow robot-specific finishing request and specify parking spots (`#379 <https://github.com/open-rmf/rmf_ros2/issues/379>`_)
-* Provide an API that says the robot's lift destination (`#376 <https://github.com/open-rmf/rmf_ros2/issues/376>`_)
-* Quiet cancel API (`#357 <https://github.com/open-rmf/rmf_ros2/issues/357>`_)
-* Contributors: Arjo Chakravarty, Grey, Xiyu
 
-2.8.0 (2024-06-12)
+2.7.2 (2024-06-18)
 ------------------
 
 2.7.1 (2024-06-11)

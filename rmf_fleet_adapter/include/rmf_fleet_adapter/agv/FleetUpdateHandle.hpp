@@ -35,8 +35,6 @@
 #include <rmf_task_sequence/Phase.hpp>
 #include <rmf_task_sequence/Event.hpp>
 
-#include <rmf_task/TaskPlanner.hpp>
-
 #include <rclcpp/node.hpp>
 
 namespace rmf_fleet_adapter {
@@ -72,10 +70,6 @@ public:
   ///   ready to be used by the Fleet API side of the Adapter. Setting up a new
   ///   robot requires communication with the Schedule Node, so there may be a
   ///   delay before the robot is ready to be used.
-  ///
-  /// \warning This will throw a std::runtime_error if start is empty or if
-  /// no charging waypoint is reachable from the robot's starting location in
-  /// the navigation graph.
   ///
   /// \return a handle to give the adapter updates about the robot.
   void add_robot(
@@ -195,19 +189,6 @@ public:
   ///   robots before triggering this callback.
   FleetUpdateHandle& consider_composed_requests(ConsiderRequest consider);
 
-  /// Allow this fleet adapter to consider zone requests.
-  ///
-  /// Pass in a nullptr to disable zone requests.
-  ///
-  /// By default, zone requests are always accepted.
-  ///
-  /// \param[in] consider
-  ///   Decide whether to accept a zone request. The description will satisfy
-  ///   the event_description__zone.json schema of rmf_fleet_adapter. The
-  ///   FleetUpdateHandle will ensure that the request is feasible for the
-  ///   robots before triggering this callback.
-  FleetUpdateHandle& consider_zone_requests(ConsiderRequest consider);
-
   /// Allow this fleet adapter to execute a PerformAction activity of specified
   /// category which may be present in sequence event.
   ///
@@ -282,8 +263,6 @@ public:
   /// Remove speed limits from specified lanes.
   void remove_speed_limits(std::vector<std::size_t> requests);
 
-  using AssignmentStrategy = rmf_task::TaskPlanner::TaskAssignmentStrategy;
-
   /// Set the parameters required for task planning. Without calling this
   /// function, this fleet will not bid for and accept tasks.
   ///
@@ -320,11 +299,6 @@ public:
   ///   A factory for a request that should be performed by each robot in this
   ///   fleet at the end of its assignments.
   ///
-  /// \param[in] task_assignment_strategy
-  ///   The strategy used to assign tasks during node expansion while
-  ///   looping unassigned tasks in the task planner.
-  ///   If not specified, the default is Profile::DefaultFastest.
-  ///
   /// \return true if task planner parameters were successfully updated.
   bool set_task_planner_params(
     rmf_battery::agv::ConstBatterySystemPtr battery_system,
@@ -334,9 +308,7 @@ public:
     double recharge_threshold,
     double recharge_soc,
     bool account_for_battery_drain,
-    rmf_task::ConstRequestFactoryPtr finishing_request = nullptr,
-    AssignmentStrategy task_assignment_strategy =
-      AssignmentStrategy::make(AssignmentStrategy::Profile::DefaultFastest));
+    rmf_task::ConstRequestFactoryPtr finishing_request = nullptr);
 
   /// A callback function that evaluates whether a fleet will accept a task
   /// request
@@ -431,23 +403,6 @@ public:
 
   /// Trigger a replan for task allocation for robots in this fleet.
   void reassign_dispatched_tasks();
-
-  /// The planner cache might be able to balloon to very large sizes on maps
-  /// with many vertices. The fleet adapter will periodically audit the size
-  /// of the cache. Setting this reset size will have the fleet adapter clear
-  /// the planning cache when its number of entries exceeds the size that you
-  /// stipulate here.
-  ///
-  /// Overall the planner cache is important for ensuring reasonable performance
-  /// for traffic planning, especially during negotiations, but it can easily
-  /// grow larger than it really needs to be, so periodically clearing it can
-  /// help keep the fleet adapter's memory usage from inflating without
-  /// noticeably impacting performance.
-  ///
-  /// If you pass 0 into this function, then the cache will be cleared every
-  /// time the periodic audit occurs. Pass in std::nullopt to never clear the
-  /// cache (this is the default behavior).
-  void set_planner_cache_reset_size(std::optional<std::size_t> max_size);
 
   /// Get the rclcpp::Node that this fleet update handle will be using for
   /// communication.

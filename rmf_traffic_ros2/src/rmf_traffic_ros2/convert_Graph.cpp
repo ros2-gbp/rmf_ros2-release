@@ -27,8 +27,6 @@
 
 #include <rmf_building_map_msgs/msg/graph_node.hpp>
 #include <rmf_building_map_msgs/msg/graph_edge.hpp>
-#include <rmf_building_map_msgs/msg/graph_zone.hpp>
-#include <rmf_building_map_msgs/msg/zone_vertex.hpp>
 #include <rmf_building_map_msgs/msg/param.hpp>
 
 #include <unordered_set>
@@ -357,29 +355,6 @@ std::optional<rmf_traffic::agv::Graph> convert(
   rmf_traffic::agv::Graph graph;
   std::unordered_set<std::size_t> added_waypoints = {};
 
-  struct ZoneVertexProperties
-  {
-    rmf_traffic::agv::Graph::ZonePropertiesPtr zone;
-    std::string group;
-    uint8_t priority;
-  };
-  std::unordered_map<std::string, ZoneVertexProperties> zone_of_vertex;
-
-  for (const auto& z : navgraph.zones)
-  {
-    const auto zone = graph.set_known_zone(
-      rmf_traffic::agv::Graph::ZoneProperties(
-        z.name,
-        z.level,
-        z.type,
-        Eigen::Vector2d(z.center_x, z.center_y),
-        z.yaw,
-        Eigen::Vector2d(z.width, z.length)));
-
-    for (const auto& v : z.vertices)
-      zone_of_vertex[v.name] = ZoneVertexProperties{zone, v.group, v.priority};
-  }
-
   for (const auto& v : navgraph.vertices)
   {
     const std::string wp_name = v.name;
@@ -415,26 +390,14 @@ std::optional<rmf_traffic::agv::Graph> convert(
     // The map_name field is essential for a Graph::Waypoint
     if (map_name.empty())
       return std::nullopt;
-    auto& wp = graph.add_waypoint(map_name, loc);
-    wp.set_holding_point(is_holding_point)
+    graph.add_waypoint(map_name, loc)
+    .set_holding_point(is_holding_point)
     .set_passthrough_point(is_passthrough_point)
     .set_parking_spot(is_parking_spot)
     .set_charger(is_charger);
-
     const auto wp_index = graph.num_waypoints() - 1;
     if (!graph.set_key(wp_name, wp_index))
       return std::nullopt;
-
-    // Called after set_key to avoid adding an empty waypoint
-    const auto zone_it = zone_of_vertex.find(wp_name);
-    if (zone_it != zone_of_vertex.end())
-    {
-      wp.set_in_zone(zone_it->second.zone);
-      auto* iv = zone_it->second.zone->find_internal_vertex(wp_name);
-      iv->set_group_name(zone_it->second.group);
-      iv->set_priority(zone_it->second.priority);
-    }
-
     added_waypoints.insert(wp_index);
   }
   for (const auto& e : navgraph.edges)
@@ -491,10 +454,6 @@ std::optional<rmf_traffic::agv::Graph> convert(
         using LiftMove = Lane::LiftMove;
         using Dock = Lane::Dock;
         using Wait = Lane::Wait;
-        using ZonePreEntry = Lane::ZonePreEntry;
-        using ZonePostEntry = Lane::ZonePostEntry;
-        using ZonePreExit = Lane::ZonePreExit;
-        using ZonePostExit = Lane::ZonePostExit;
 
         if (params.empty())
           return;
@@ -587,54 +546,6 @@ std::optional<rmf_traffic::agv::Graph> convert(
                 std::move(lift_name),
                 std::move(floor_name),
                 duration));
-        }
-        // ZonePreEntry
-        else if (params.find("ZonePreEntry_zone_name") != params.end() &&
-          params.find("ZonePreEntry_duration") != params.end())
-        {
-          std::string zone_name =
-            params.at("ZonePreEntry_zone_name").value_string;
-          rmf_traffic::Duration duration = std::chrono::nanoseconds(
-            static_cast<uint64_t>(
-              params.at("ZonePreEntry_duration").value_float));
-          event_to_set = Event::make(
-            ZonePreEntry(std::move(zone_name), duration));
-        }
-        // ZonePostEntry
-        else if (params.find("ZonePostEntry_zone_name") != params.end() &&
-          params.find("ZonePostEntry_duration") != params.end())
-        {
-          std::string zone_name =
-            params.at("ZonePostEntry_zone_name").value_string;
-          rmf_traffic::Duration duration = std::chrono::nanoseconds(
-            static_cast<uint64_t>(
-              params.at("ZonePostEntry_duration").value_float));
-          event_to_set = Event::make(
-            ZonePostEntry(std::move(zone_name), duration));
-        }
-        // ZonePreExit
-        else if (params.find("ZonePreExit_zone_name") != params.end() &&
-          params.find("ZonePreExit_duration") != params.end())
-        {
-          std::string zone_name =
-            params.at("ZonePreExit_zone_name").value_string;
-          rmf_traffic::Duration duration = std::chrono::nanoseconds(
-            static_cast<uint64_t>(
-              params.at("ZonePreExit_duration").value_float));
-          event_to_set = Event::make(
-            ZonePreExit(std::move(zone_name), duration));
-        }
-        // ZonePostExit
-        else if (params.find("ZonePostExit_zone_name") != params.end() &&
-          params.find("ZonePostExit_duration") != params.end())
-        {
-          std::string zone_name =
-            params.at("ZonePostExit_zone_name").value_string;
-          rmf_traffic::Duration duration = std::chrono::nanoseconds(
-            static_cast<uint64_t>(
-              params.at("ZonePostExit_duration").value_float));
-          event_to_set = Event::make(
-            ZonePostExit(std::move(zone_name), duration));
         }
         // Dock
         else if (params.find("wait_duration") != params.end())
@@ -878,82 +789,6 @@ public:
       .value_bool(false));
   }
 
-  void execute(const ZonePreEntry& zone) final
-  {
-    _edge_params.emplace_back(rmf_building_map_msgs::build<GraphParamMsg>()
-      .name(_prefix + "_ZonePreEntry_zone_name")
-      .type(GraphParamMsg::TYPE_STRING)
-      .value_int(0)
-      .value_float(0)
-      .value_string(zone.zone_name())
-      .value_bool(false));
-
-    _edge_params.emplace_back(rmf_building_map_msgs::build<GraphParamMsg>()
-      .name(_prefix + "_ZonePreEntry_duration")
-      .type(GraphParamMsg::TYPE_INT)
-      .value_int(0)
-      .value_float(zone.duration().count())
-      .value_string("")
-      .value_bool(false));
-  }
-
-  void execute(const ZonePostEntry& zone) final
-  {
-    _edge_params.emplace_back(rmf_building_map_msgs::build<GraphParamMsg>()
-      .name(_prefix + "_ZonePostEntry_zone_name")
-      .type(GraphParamMsg::TYPE_STRING)
-      .value_int(0)
-      .value_float(0)
-      .value_string(zone.zone_name())
-      .value_bool(false));
-
-    _edge_params.emplace_back(rmf_building_map_msgs::build<GraphParamMsg>()
-      .name(_prefix + "_ZonePostEntry_duration")
-      .type(GraphParamMsg::TYPE_INT)
-      .value_int(0)
-      .value_float(zone.duration().count())
-      .value_string("")
-      .value_bool(false));
-  }
-
-  void execute(const ZonePreExit& zone) final
-  {
-    _edge_params.emplace_back(rmf_building_map_msgs::build<GraphParamMsg>()
-      .name(_prefix + "_ZonePreExit_zone_name")
-      .type(GraphParamMsg::TYPE_STRING)
-      .value_int(0)
-      .value_float(0)
-      .value_string(zone.zone_name())
-      .value_bool(false));
-
-    _edge_params.emplace_back(rmf_building_map_msgs::build<GraphParamMsg>()
-      .name(_prefix + "_ZonePreExit_duration")
-      .type(GraphParamMsg::TYPE_INT)
-      .value_int(0)
-      .value_float(zone.duration().count())
-      .value_string("")
-      .value_bool(false));
-  }
-
-  void execute(const ZonePostExit& zone) final
-  {
-    _edge_params.emplace_back(rmf_building_map_msgs::build<GraphParamMsg>()
-      .name(_prefix + "_ZonePostExit_zone_name")
-      .type(GraphParamMsg::TYPE_STRING)
-      .value_int(0)
-      .value_float(0)
-      .value_string(zone.zone_name())
-      .value_bool(false));
-
-    _edge_params.emplace_back(rmf_building_map_msgs::build<GraphParamMsg>()
-      .name(_prefix + "_ZonePostExit_duration")
-      .type(GraphParamMsg::TYPE_INT)
-      .value_int(0)
-      .value_float(zone.duration().count())
-      .value_string("")
-      .value_bool(false));
-  }
-
 private:
   std::string _prefix;
   std::vector<GraphParamMsg>& _edge_params;
@@ -966,8 +801,6 @@ std::unique_ptr<rmf_building_map_msgs::msg::Graph> convert(
   using GraphMsg = rmf_building_map_msgs::msg::Graph;
   using GraphNodeMsg = rmf_building_map_msgs::msg::GraphNode;
   using GraphEdgeMsg = rmf_building_map_msgs::msg::GraphEdge;
-  using GraphZoneMsg = rmf_building_map_msgs::msg::GraphZone;
-  using GraphZoneVertexMsg = rmf_building_map_msgs::msg::ZoneVertex;
   using GraphParamMsg = rmf_building_map_msgs::msg::Param;
 
   if (fleet_name.empty())
@@ -981,8 +814,6 @@ std::unique_ptr<rmf_building_map_msgs::msg::Graph> convert(
 
   std::vector<GraphNodeMsg> vertices;
   std::vector<GraphEdgeMsg> edges;
-  std::vector<GraphZoneMsg> zones;
-
   // Populate vertices
   for (std::size_t i = 0; i < n_waypoints; ++i)
   {
@@ -1024,16 +855,6 @@ std::unique_ptr<rmf_building_map_msgs::msg::Graph> convert(
       .value_float(0.0)
       .value_string("")
       .value_bool(wp.is_charger()));
-    if (wp.in_mutex_group() != "")
-    {
-      params.emplace_back(rmf_building_map_msgs::build<GraphParamMsg>()
-      .name("mutex")
-      .type(GraphParamMsg::TYPE_STRING)
-      .value_int(0)
-      .value_float(0.0)
-      .value_string(wp.in_mutex_group())
-      .value_bool(false));
-    }
     const std::string wp_name = wp.name() ? *wp.name() : "";
     vertices.emplace_back(rmf_building_map_msgs::build<GraphNodeMsg>()
       .x(loc[0])
@@ -1057,16 +878,6 @@ std::unique_ptr<rmf_building_map_msgs::msg::Graph> convert(
         .value_float(properties.speed_limit().value())
         .value_string("")
         .value_bool(false));
-    }
-    if (properties.in_mutex_group() != "")
-    {
-      params.emplace_back(rmf_building_map_msgs::build<GraphParamMsg>()
-      .name("mutex")
-      .type(GraphParamMsg::TYPE_STRING)
-      .value_int(0)
-      .value_float(0.0)
-      .value_string(properties.in_mutex_group())
-      .value_bool(false));
     }
     // Serialize events for this lane
     const auto entry_event = lane.entry().event();
@@ -1123,36 +934,11 @@ std::unique_ptr<rmf_building_map_msgs::msg::Graph> convert(
     );
   }
 
-  const auto& graph_zones = graph.all_known_zones();
-  for (const auto& zone_ptr : graph_zones)
-  {
-    std::vector<GraphZoneVertexMsg> zone_vertices;
-    for (const auto& zv : zone_ptr->internal_vertices())
-    {
-      zone_vertices.emplace_back(rmf_building_map_msgs::build<GraphZoneVertexMsg>()
-        .name(zv.name())
-        .group(zv.get_group_name())
-        .priority(zv.get_priority()));
-    }
-
-    zones.emplace_back(rmf_building_map_msgs::build<GraphZoneMsg>()
-      .name(zone_ptr->name())
-      .level(zone_ptr->map())
-      .type(zone_ptr->type())
-      .center_x(zone_ptr->location().x())
-      .center_y(zone_ptr->location().y())
-      .yaw(zone_ptr->orientation())
-      .length(zone_ptr->dimensions().y())
-      .width(zone_ptr->dimensions().x())
-      .vertices(std::move(zone_vertices)));
-  }
-
   std::unique_ptr<GraphMsg> msg = std::make_unique<GraphMsg>(
     rmf_building_map_msgs::build<GraphMsg>()
     .name(fleet_name)
     .vertices(std::move(vertices))
     .edges(std::move(edges))
-    .zones(std::move(zones))
     .params({})
   );
 

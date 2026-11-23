@@ -33,12 +33,9 @@
 #include "../tasks/Clean.hpp"
 #include "../tasks/ChargeBattery.hpp"
 #include "../tasks/Compose.hpp"
-#include "../tasks/Zone.hpp"
 #include "../events/GoToPlace.hpp"
-#include "../events/GoToZone.hpp"
 #include "../events/ResponsiveWait.hpp"
 #include "../events/PerformAction.hpp"
-#include "../events/DynamicEvent.hpp"
 
 #include <rmf_task/Constraints.hpp>
 #include <rmf_task/Parameters.hpp>
@@ -54,7 +51,6 @@
 #include <stdexcept>
 
 #include <rmf_fleet_adapter/schemas/place.hpp>
-#include <rmf_fleet_adapter/schemas/priority_description__binary.hpp>
 #include <rmf_api_msgs/schemas/task_request.hpp>
 
 namespace rmf_fleet_adapter {
@@ -218,10 +214,6 @@ std::shared_ptr<rmf_task::Request> FleetUpdateHandle::Implementation::convert(
   if (!deserialized_task.description)
   {
     errors = deserialized_task.errors;
-    for (auto& e : errors)
-    {
-      e = make_error_str(6, "Unable to deserialize", e);
-    }
     return nullptr;
   }
 
@@ -249,30 +241,38 @@ std::shared_ptr<rmf_task::Request> FleetUpdateHandle::Implementation::convert(
   const auto p_it = request_msg.find("priority");
   if (p_it != request_msg.end())
   {
-    try
+    // Assume the schema is not valid until we have successfully parsed it.
+    bool valid_schema = false;
+    // TODO(YV): Validate with priority_description_Binary.json
+    if (p_it->contains("type") && p_it->contains("value"))
     {
-      static const auto validator =
-        make_validator(rmf_fleet_adapter::schemas::priority_description__binary);
-      validator.validate(*p_it);
-
-      const auto& p_value = (*p_it)["value"];
-      if (p_value.get<uint64_t>() > 0)
+      const auto& p_type = (*p_it)["type"];
+      if (p_type.is_string() && p_type.get<std::string>() == "binary")
       {
-        priority = rmf_task::BinaryPriorityScheme::make_high_priority();
+        const auto& p_value = (*p_it)["value"];
+        if (p_value.is_number_integer())
+        {
+          // The message matches the expected schema, so now we can mark it as
+          // valid.
+          valid_schema = true;
+
+          // If we have an integer greater than 0, we assign a high priority.
+          // Else the priority will default to low.
+          if (p_value.get<uint64_t>() > 0)
+          {
+            priority = rmf_task::BinaryPriorityScheme::make_high_priority();
+          }
+        }
       }
     }
-    catch (const std::exception& e)
+
+    if (!valid_schema)
     {
-      const std::string error_str = make_error_str(
-        4, "Unsupported type",
-        "Fleet [" + name + "] does not support priority request: "
-        + p_it->dump() + "\nDefaulting to low binary priority.");
-      RCLCPP_ERROR(
-        node->get_logger(),
-        "Malformed incoming priority description: %s\n%s",
-        e.what(),
-        error_str.c_str());
-      errors.push_back(error_str);
+      errors.push_back(
+        make_error_str(
+          4, "Unsupported type",
+          "Fleet [" + name + "] does not support priority request: "
+          + p_it->dump() + "\nDefaulting to low binary priority."));
     }
   }
 
@@ -410,7 +410,7 @@ public:
       {
         RCLCPP_ERROR(
           node->get_logger(),
-          "[AllocateTasks] Unable to find a robot associated with index [%zu]",
+          "[AllocateTasks] Unable to find a robot associated with index [%d]",
           i);
         continue;
       }
@@ -469,7 +469,7 @@ void FleetUpdateHandle::Implementation::bid_notice_cb(
     RCLCPP_INFO(
       node->get_logger(),
       "Fleet [%s] does not have any robots to accept task [%s]. Use "
-      "FleetUpdateHandle::add_robot(~) to add robots to this fleet. ",
+      "FleetUpdateHadndle::add_robot(~) to add robots to this fleet. ",
       name.c_str(), task_id.c_str());
     return;
   }
@@ -522,40 +522,17 @@ void FleetUpdateHandle::Implementation::bid_notice_cb(
       });
   }
 
-  // If a fleet_name was specified in the request, only proceed if this
-  // fleet's name matches it. fleet_name may be a single string or an array
-  // of strings, in which case this fleet must be one of the listed names.
-  if (request_msg.contains("fleet_name"))
+  // If a fleet_name was specified in the request, only proceed if the value matches
+  // the name of this fleet.
+  if (request_msg.contains("fleet_name") &&
+    request_msg["fleet_name"].template get<std::string>() != name)
   {
-    const auto& fleet_name = request_msg["fleet_name"];
-    bool allowed = false;
-    if (fleet_name.is_array())
-    {
-      for (const auto& n : fleet_name)
-      {
-        if (n.template get<std::string>() == name)
-        {
-          allowed = true;
-          break;
-        }
-      }
-    }
-    else
-    {
-      allowed = fleet_name.template get<std::string>() == name;
-    }
-
-    if (!allowed)
-    {
-      RCLCPP_INFO(
-        node->get_logger(),
-        "Ignoring BidNotice request as fleet [%s] is not in the requested "
-        "fleet_name list.",
-        name.c_str());
-      return;
-    }
+    RCLCPP_INFO(
+      node->get_logger(),
+      "Ignoring BidNotice request as it is for fleet [%s].",
+      request_msg["fleet_name"].template get<std::string>().c_str());
+    return;
   }
-
 
   std::vector<std::string> errors = {};
   const auto new_request = convert(task_id, request_msg, errors);
@@ -574,8 +551,7 @@ void FleetUpdateHandle::Implementation::bid_notice_cb(
     *task_planner,
     node);
 
-  auto receive_allocation =
-    [w = weak_self, respond, task_id, dry_run = bid_notice.dry_run](
+  auto receive_allocation = [w = weak_self, respond, task_id](
     AllocateTasks::Result result)
     {
       const auto self = w.lock();
@@ -666,13 +642,6 @@ void FleetUpdateHandle::Implementation::bid_notice_cb(
         self->_pimpl->node->get_logger(),
         "Submitted BidProposal to accommodate task [%s] by robot [%s] with new cost [%f]",
         task_id.c_str(), robot_name->c_str(), cost);
-
-      // If the request is for a dry run, we do not store the assignments for
-      // dispatch.
-      if (dry_run)
-      {
-        return;
-      }
 
       // Store assignments in internal map
       self->_pimpl->bid_notice_assignments.insert({task_id, assignments});
@@ -801,7 +770,7 @@ void FleetUpdateHandle::Implementation::dispatch_command_cb(
         {
           auto msg = dispatch_ack;
           msg.success = true;
-          dispatch_ack_pub->publish(msg);
+          dispatch_ack_pub->publish(dispatch_ack);
         },
         // On failure
         [dispatch_ack, w = weak_self, request](
@@ -905,7 +874,7 @@ void FleetUpdateHandle::Implementation::dispatch_command_cb(
           [task_id, name = name, node = node](std::vector<std::string> errors)
           {
             std::stringstream ss;
-            ss << "Unable to replan assignments when cancelling task ["
+            ss << "Unabled to replan assignments when cancelling task ["
                << task_id << "] for fleet [" << name << "]. ";
             if (errors.empty())
             {
@@ -947,7 +916,7 @@ double FleetUpdateHandle::Implementation::compute_cost(
 {
   rmf_task::TaskPlanner::Assignments raw_assignments;
   raw_assignments.reserve(assignments.size());
-  for (const auto& [_, queue] : assignments)
+  for (const auto [_, queue] : assignments)
   {
     raw_assignments.push_back(queue);
   }
@@ -1162,8 +1131,7 @@ namespace {
 std::optional<rmf_fleet_msgs::msg::Location> convert_location(
   const agv::RobotContext& context)
 {
-  const auto location = context.location();
-  if (location.empty())
+  if (context.location().empty())
   {
     const auto& lost = context.lost();
     if (lost.has_value() && lost->location.has_value())
@@ -1187,7 +1155,7 @@ std::optional<rmf_fleet_msgs::msg::Location> convert_location(
   }
 
   const auto& graph = context.planner()->get_configuration().graph();
-  const auto l = location.front();
+  const auto& l = context.location().front();
   const auto& wp = graph.get_waypoint(l.waypoint());
   const Eigen::Vector2d p = l.location().value_or(wp.get_location());
 
@@ -1265,206 +1233,172 @@ void FleetUpdateHandle::Implementation::update_fleet() const
 //==============================================================================
 void FleetUpdateHandle::Implementation::update_fleet_state() const
 {
-  nlohmann::json fleet_state_update_msg;
-  fleet_state_update_msg["type"] = "fleet_state_update";
-  auto& fleet_state_msg = fleet_state_update_msg["data"];
-  fleet_state_msg["name"] = name;
-  auto& robots = fleet_state_msg["robots"];
-  robots = std::unordered_map<std::string, nlohmann::json>();
-  for (const auto& [context, mgr] : task_managers)
+  // Publish to API server
+  if (broadcast_client)
   {
-    const auto& name = context->name();
-    nlohmann::json& json = robots[name];
-    json["name"] = name;
-    json["status"] = mgr->robot_status();
-    json["task_id"] = mgr->current_task_id().value_or("");
-    json["unix_millis_time"] =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-      context->now().time_since_epoch()).count();
-    json["battery"] = context->current_battery_soc();
-
-    const auto location_msg = convert_location(*context);
-    if (location_msg.has_value())
+    nlohmann::json fleet_state_update_msg;
+    fleet_state_update_msg["type"] = "fleet_state_update";
+    auto& fleet_state_msg = fleet_state_update_msg["data"];
+    fleet_state_msg["name"] = name;
+    auto& robots = fleet_state_msg["robots"];
+    robots = std::unordered_map<std::string, nlohmann::json>();
+    for (const auto& [context, mgr] : task_managers)
     {
-      nlohmann::json& location = json["location"];
-      location["map"] = location_msg->level_name;
-      location["x"] = location_msg->x;
-      location["y"] = location_msg->y;
-      location["yaw"] = location_msg->yaw;
+      const auto& name = context->name();
+      nlohmann::json& json = robots[name];
+      json["name"] = name;
+      json["status"] = mgr->robot_status();
+      json["task_id"] = mgr->current_task_id().value_or("");
+      json["unix_millis_time"] =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+        context->now().time_since_epoch()).count();
+      json["battery"] = context->current_battery_soc();
+
+      const auto location_msg = convert_location(*context);
+      if (location_msg.has_value())
+      {
+        nlohmann::json& location = json["location"];
+        location["map"] = location_msg->level_name;
+        location["x"] = location_msg->x;
+        location["y"] = location_msg->y;
+        location["yaw"] = location_msg->yaw;
+      }
+
+      std::lock_guard<std::mutex> lock(context->reporting().mutex());
+      const auto& issues = context->reporting().open_issues();
+      auto& issues_msg = json["issues"];
+      issues_msg = std::vector<nlohmann::json>();
+      for (const auto& issue : issues)
+      {
+        nlohmann::json issue_msg;
+        issue_msg["category"] = issue->category;
+        issue_msg["detail"] = issue->detail;
+        issues_msg.push_back(std::move(issue_msg));
+      }
+
+      const auto& commission = context->commission();
+      nlohmann::json commission_json;
+      commission_json["dispatch_tasks"] =
+        commission.is_accepting_dispatched_tasks();
+      commission_json["direct_tasks"] = commission.is_accepting_direct_tasks();
+      commission_json["idle_behavior"] =
+        commission.is_performing_idle_behavior();
+
+      json["commission"] = commission_json;
+
+      nlohmann::json mutex_groups_json;
+      std::vector<std::string> locked_mutex_groups;
+      for (const auto& g : context->locked_mutex_groups())
+      {
+        locked_mutex_groups.push_back(g.first);
+      }
+      mutex_groups_json["locked"] = std::move(locked_mutex_groups);
+
+      std::vector<std::string> requesting_mutex_groups;
+      for (const auto& g : context->requesting_mutex_groups())
+      {
+        requesting_mutex_groups.push_back(g.first);
+      }
+      mutex_groups_json["requesting"] = std::move(requesting_mutex_groups);
+
+      json["mutex_groups"] = std::move(mutex_groups_json);
     }
 
-    std::lock_guard<std::mutex> lock(context->reporting().mutex());
-    const auto& issues = context->reporting().open_issues();
-    auto& issues_msg = json["issues"];
-    issues_msg = std::vector<nlohmann::json>();
-    for (const auto& issue : issues)
-    {
-      nlohmann::json issue_msg;
-      issue_msg["category"] = issue->category;
-      issue_msg["detail"] = issue->detail;
-      issues_msg.push_back(std::move(issue_msg));
-    }
-
-    const auto& commission = context->commission();
-    nlohmann::json commission_json;
-    commission_json["dispatch_tasks"] =
-      commission.is_accepting_dispatched_tasks();
-    commission_json["direct_tasks"] = commission.is_accepting_direct_tasks();
-    commission_json["idle_behavior"] =
-      commission.is_performing_idle_behavior();
-
-    json["commission"] = commission_json;
-
-    nlohmann::json mutex_groups_json;
-    std::vector<std::string> locked_mutex_groups;
-    for (const auto& g : context->locked_mutex_groups())
-    {
-      locked_mutex_groups.push_back(g.first);
-    }
-    mutex_groups_json["locked"] = std::move(locked_mutex_groups);
-
-    std::vector<std::string> requesting_mutex_groups;
-    for (const auto& g : context->requesting_mutex_groups())
-    {
-      requesting_mutex_groups.push_back(g.first);
-    }
-    mutex_groups_json["requesting"] = std::move(requesting_mutex_groups);
-
-    json["mutex_groups"] = std::move(mutex_groups_json);
-  }
-
-  try
-  {
-    std::unique_lock<std::mutex> lock(*update_callback_mutex);
-    if (update_callback)
-      update_callback(fleet_state_update_msg);
-
-    // Publish to API server
-    if (broadcast_client)
+    try
     {
       static const auto validator =
         make_validator(rmf_api_msgs::schemas::fleet_state_update);
+
       validator.validate(fleet_state_update_msg);
 
+      std::unique_lock<std::mutex> lock(*update_callback_mutex);
+      if (update_callback)
+        update_callback(fleet_state_update_msg);
       broadcast_client->publish(fleet_state_update_msg);
     }
-
-    FleetStateUpdateMsg update_msg;
-    update_msg.data = fleet_state_update_msg.dump();
-    fleet_state_update_pub->publish(update_msg);
-  }
-  catch (const std::exception& e)
-  {
-    RCLCPP_ERROR(
-      node->get_logger(),
-      "Malformed outgoing fleet state json message: %s\nMessage:\n%s",
-      e.what(),
-      fleet_state_update_msg.dump(2).c_str());
+    catch (const std::exception& e)
+    {
+      RCLCPP_ERROR(
+        node->get_logger(),
+        "Malformed outgoing fleet state json message: %s\nMessage:\n%s",
+        e.what(),
+        fleet_state_update_msg.dump(2).c_str());
+    }
   }
 }
 
 //==============================================================================
 void FleetUpdateHandle::Implementation::update_fleet_logs() const
 {
-  nlohmann::json fleet_log_update_msg;
-  fleet_log_update_msg["type"] = "fleet_log_update";
-  auto& fleet_log_msg = fleet_log_update_msg["data"];
-  fleet_log_msg["name"] = name;
-  // TODO(MXG): fleet_log_msg["log"]
-  auto& robots_msg = fleet_log_msg["robots"];
-  robots_msg = std::unordered_map<std::string, nlohmann::json>();
-  for (const auto& [context, _] : task_managers)
+  if (broadcast_client)
   {
-    auto robot_log_msg_array = std::vector<nlohmann::json>();
-
-    std::lock_guard<std::mutex> lock(context->reporting().mutex());
-    const auto& log = context->reporting().log();
-    for (const auto& entry : log_reader.read(log.view()))
-      robot_log_msg_array.push_back(log_to_json(entry));
-
-    if (!robot_log_msg_array.empty())
-      robots_msg[context->name()] = std::move(robot_log_msg_array);
-  }
-
-  if (robots_msg.empty())
-  {
-    // No new logs to report
-    return;
-  }
-
-  try
-  {
-    static const auto validator =
-      make_validator(rmf_api_msgs::schemas::fleet_log_update);
-
-    validator.validate(fleet_log_update_msg);
-
-    std::unique_lock<std::mutex> lock(*update_callback_mutex);
-    if (update_callback)
-      update_callback(fleet_log_update_msg);
-
-    if (broadcast_client)
+    nlohmann::json fleet_log_update_msg;
+    fleet_log_update_msg["type"] = "fleet_log_update";
+    auto& fleet_log_msg = fleet_log_update_msg["data"];
+    fleet_log_msg["name"] = name;
+    // TODO(MXG): fleet_log_msg["log"]
+    auto& robots_msg = fleet_log_msg["robots"];
+    robots_msg = std::unordered_map<std::string, nlohmann::json>();
+    for (const auto& [context, _] : task_managers)
     {
-      broadcast_client->publish(fleet_log_update_msg);
+      auto robot_log_msg_array = std::vector<nlohmann::json>();
+
+      std::lock_guard<std::mutex> lock(context->reporting().mutex());
+      const auto& log = context->reporting().log();
+      for (const auto& entry : log_reader.read(log.view()))
+        robot_log_msg_array.push_back(log_to_json(entry));
+
+      if (!robot_log_msg_array.empty())
+        robots_msg[context->name()] = std::move(robot_log_msg_array);
     }
 
-    FleetLogUpdateMsg update_msg;
-    update_msg.data = fleet_log_update_msg.dump();
-    fleet_log_update_pub->publish(update_msg);
-  }
-  catch (const std::exception& e)
-  {
-    RCLCPP_ERROR(
-      node->get_logger(),
-      "Malformed outgoing fleet log json message: %s\nMessage:\n%s",
-      e.what(),
-      fleet_log_update_msg.dump(2).c_str());
+    if (robots_msg.empty())
+    {
+      // No new logs to report
+      return;
+    }
+
+    try
+    {
+      static const auto validator =
+        make_validator(rmf_api_msgs::schemas::fleet_log_update);
+
+      validator.validate(fleet_log_update_msg);
+
+      std::unique_lock<std::mutex> lock(*update_callback_mutex);
+      if (update_callback)
+        update_callback(fleet_log_update_msg);
+      broadcast_client->publish(fleet_log_update_msg);
+    }
+    catch (const std::exception& e)
+    {
+      RCLCPP_ERROR(
+        node->get_logger(),
+        "Malformed outgoing fleet log json message: %s\nMessage:\n%s",
+        e.what(),
+        fleet_log_update_msg.dump(2).c_str());
+    }
   }
 }
 
 //==============================================================================
 void FleetUpdateHandle::Implementation::handle_emergency(
-  const bool emergency_signal)
+  const bool is_emergency)
 {
-  if (emergency_signal == emergency_active)
+  if (is_emergency == emergency_active)
     return;
 
-  emergency_active = emergency_signal;
-  if (emergency_signal)
+  emergency_active = is_emergency;
+  if (is_emergency)
   {
     update_emergency_planner();
   }
 
   for (const auto& [context, _] : task_managers)
   {
-    context->_set_emergency(emergency_signal);
+    context->_set_emergency(is_emergency);
   }
-  emergency_publisher.get_subscriber().on_next(emergency_signal);
-}
-
-//==============================================================================
-void FleetUpdateHandle::Implementation::handle_target_emergency(
-  std::shared_ptr<rmf_fleet_msgs::msg::EmergencySignal> emergency_signal)
-{
-  bool execute = false;
-  if (emergency_signal->fleet_names.empty())
-  {
-    execute = true;
-  }
-
-  for (const auto& fleet_name : emergency_signal->fleet_names)
-  {
-    if (fleet_name == name)
-    {
-      execute = true;
-      break;
-    }
-  }
-
-  if (execute)
-  {
-    handle_emergency(emergency_signal->is_emergency);
-  }
+  emergency_publisher.get_subscriber().on_next(is_emergency);
 }
 
 //==============================================================================
@@ -1477,11 +1411,7 @@ public:
   void execute(const LiftSessionEnd&) override {}
   void execute(const LiftMove&) override {}
   void execute(const Wait&) override {}
-  void execute(const Dock& /*dock*/) override {}
-  void execute(const ZonePreEntry&) override {}
-  void execute(const ZonePostEntry&) override {}
-  void execute(const ZonePreExit&) override {}
-  void execute(const ZonePostExit&) override {}
+  void execute(const Dock& dock) override {}
   void execute(const LiftSessionBegin& info) override
   {
     lift = info.lift_name();
@@ -1515,6 +1445,8 @@ std::vector<std::size_t> find_emergency_lift_closures(
     if (const auto* event = lane.exit().event())
       event->execute(executor);
 
+    const auto wp0 = lane.entry().waypoint_index();
+    const auto wp1 = lane.exit().waypoint_index();
     if (executor.enter)
     {
       if (emergency_level_for_lift.count(executor.lift) > 0)
@@ -1634,7 +1566,7 @@ PlaceDeserializer make_place_deserializer(
   planner)
 {
   return [planner = std::move(planner)](const nlohmann::json& msg)
-    -> DeserializedPlace
+    -> agv::DeserializedPlace
     {
       std::optional<rmf_traffic::agv::Plan::Goal> place;
       const auto& graph = (*planner)->get_configuration().graph();
@@ -1687,154 +1619,10 @@ PlaceDeserializer make_place_deserializer(
       {
         const auto& ori_it = msg.find("orientation");
         if (ori_it != msg.end())
-        {
           place->orientation(ori_it->get<double>());
-        }
       }
 
       return {place, {}};
-    };
-}
-
-ZoneDeserializer make_zone_deserializer(
-  std::shared_ptr<const std::shared_ptr<const rmf_traffic::agv::Planner>>
-  planner)
-{
-  return [planner = std::move(planner)](const nlohmann::json& msg)
-    -> DeserializedZone
-    {
-      std::optional<std::string> zone_name;
-      const auto& graph = (*planner)->get_configuration().graph();
-      const auto zone_property = graph.find_known_zone(msg.get<std::string>());
-      if (!zone_property)
-      {
-        return {
-          std::nullopt,
-          {"zone name [" + msg.get<std::string>() + "] cannot be "
-            "found in the navigation graph"}
-        };
-      }
-      zone_name = zone_property->name();
-      return {zone_name, {}};
-    };
-}
-
-ZoneWaypointDeserializer make_zone_waypoint_deserializer(
-  std::shared_ptr<const std::shared_ptr<const rmf_traffic::agv::Planner>>
-  planner)
-{
-  return [planner = std::move(planner)](
-      const std::string& zone_name,
-      const nlohmann::json& msg) -> DeserializedZoneWaypoint
-    {
-      const auto& graph = (*planner)->get_configuration().graph();
-      const auto zone_props = graph.find_known_zone(zone_name);
-      if (!zone_props)
-      {
-        return {
-          std::nullopt,
-          {"zone name [" + zone_name + "] cannot be found in the navigation "
-            "graph"}
-        };
-      }
-
-      // Resolve the JSON value to either a name or a graph waypoint index.
-      std::optional<std::string> name_in;
-      std::optional<std::size_t> index_in;
-      if (msg.is_string())
-      {
-        name_in = msg.get<std::string>();
-      }
-      else if (msg.is_number_integer())
-      {
-        index_in = msg.get<std::size_t>();
-      }
-      else if (msg.is_object() && msg.contains("waypoint"))
-      {
-        const auto& wp_field = msg.at("waypoint");
-        if (wp_field.is_string())
-          name_in = wp_field.get<std::string>();
-        else if (wp_field.is_number_integer())
-          index_in = wp_field.get<std::size_t>();
-      }
-
-      if (!name_in.has_value() && !index_in.has_value())
-      {
-        return {
-          std::nullopt,
-          {"zone waypoint must be a string, integer, or "
-            "{\"waypoint\": <string|integer>}"}
-        };
-      }
-
-      if (index_in.has_value() && *index_in >= graph.num_waypoints())
-      {
-        return {
-          std::nullopt,
-          {"waypoint index [" + std::to_string(*index_in)
-            + "] exceeds the navigation graph size ["
-            + std::to_string(graph.num_waypoints()) + "]"}
-        };
-      }
-
-      for (const auto& iv : zone_props->internal_vertices())
-      {
-        if (name_in.has_value())
-        {
-          // Exact match on full RMF vertex name
-          if (iv.name() == *name_in)
-            return {iv.name(), {}};
-        }
-        else
-        {
-          const auto* wp = graph.find_waypoint(iv.name());
-          if (wp && wp->index() == *index_in)
-            return {iv.name(), {}};
-        }
-      }
-
-      const std::string unknown_wp = name_in.has_value()
-        ? ("[" + *name_in + "]")
-        : ("index [" + std::to_string(*index_in) + "]");
-      return {
-        std::nullopt,
-        {"waypoint " + unknown_wp + " is not an internal vertex of zone ["
-          + zone_name + "]"}
-      };
-    };
-}
-
-ZoneGroupDeserializer make_zone_group_deserializer(
-  std::shared_ptr<const std::shared_ptr<const rmf_traffic::agv::Planner>>
-  planner)
-{
-  return [planner = std::move(planner)](
-      const std::string& zone_name,
-      const nlohmann::json& msg) -> DeserializedZoneGroup
-    {
-      const auto& graph = (*planner)->get_configuration().graph();
-      const auto zone_props = graph.find_known_zone(zone_name);
-      if (!zone_props)
-      {
-        return {
-          std::nullopt,
-          {"zone name [" + zone_name + "] cannot be found in the navigation "
-            "graph"}
-        };
-      }
-
-      const auto group = msg.get<std::string>();
-      for (const auto& iv : zone_props->internal_vertices())
-      {
-        if (iv.get_group_name() == group)
-          return {group, {}};
-      }
-
-      return {
-        std::nullopt,
-        {"group [" + group + "] is not a vertex group of zone ["
-          + zone_name + "]"}
-      };
     };
 }
 } // anonymous namespace
@@ -1853,12 +1641,8 @@ void FleetUpdateHandle::Implementation::add_standard_tasks()
     *activation.phase, activation.event);
 
   events::GoToPlace::add(*activation.event);
-  events::GoToZone::add(*activation.event);
   events::PerformAction::add(*activation.event);
   deserialization.place = make_place_deserializer(planner);
-  deserialization.zone = make_zone_deserializer(planner);
-  deserialization.zone_waypoint = make_zone_waypoint_deserializer(planner);
-  deserialization.zone_group = make_zone_group_deserializer(planner);
   deserialization.add_schema(schemas::place);
 
   events::ResponsiveWait::add(*activation.event);
@@ -1890,11 +1674,6 @@ void FleetUpdateHandle::Implementation::add_standard_tasks()
     deserialization,
     activation,
     node->clock());
-
-  tasks::add_zone(
-    deserialization);
-
-  events::DynamicEvent::add(deserialization, activation.event);
 }
 
 //==============================================================================
@@ -2236,14 +2015,6 @@ FleetUpdateHandle& FleetUpdateHandle::consider_composed_requests(
   ConsiderRequest consider)
 {
   *_pimpl->deserialization.consider_composed = std::move(consider);
-  return *this;
-}
-  
-//==============================================================================
-FleetUpdateHandle& FleetUpdateHandle::consider_zone_requests(
-  ConsiderRequest consider)
-{
-  *_pimpl->deserialization.consider_zone = std::move(consider);
   return *this;
 }
 
@@ -2754,7 +2525,7 @@ FleetUpdateHandle::retreat_to_charger_interval() const
 
 //==============================================================================
 FleetUpdateHandle& FleetUpdateHandle::set_retreat_to_charger_interval(
-  std::optional<rmf_traffic::Duration> /*duration*/)
+  std::optional<rmf_traffic::Duration> duration)
 {
   RCLCPP_WARN(
     _pimpl->node->get_logger(),
@@ -2774,28 +2545,6 @@ void FleetUpdateHandle::reassign_dispatched_tasks()
       if (!self)
         return;
       self->_pimpl->reassign_dispatched_tasks([]() {}, [](auto) {});
-    }
-  );
-}
-
-//==============================================================================
-void FleetUpdateHandle::set_planner_cache_reset_size(
-  std::optional<std::size_t> max_size)
-{
-  _pimpl->worker.schedule(
-    [w = weak_from_this(), max_size](const auto&)
-    {
-      const auto self = w.lock();
-      if (!self)
-        return;
-
-      RCLCPP_INFO(
-        self->_pimpl->node->get_logger(),
-        "Setting planner_cache_reset_size to [%s]",
-        max_size.has_value() ? std::to_string(*max_size).c_str() : "unset"
-      );
-
-      self->_pimpl->planner_cache_reset_size = max_size;
     }
   );
 }
@@ -2821,15 +2570,14 @@ bool FleetUpdateHandle::set_task_planner_params(
   double recharge_threshold,
   double recharge_soc,
   bool account_for_battery_drain,
-  rmf_task::ConstRequestFactoryPtr idle_task,
-  rmf_task::TaskPlanner::TaskAssignmentStrategy task_assignment_strategy)
+  rmf_task::ConstRequestFactoryPtr idle_task)
 {
   if (battery_system &&
     motion_sink &&
     ambient_sink &&
     tool_sink &&
     (recharge_threshold >= 0.0 && recharge_threshold <= 1.0) &&
-    (recharge_soc >= 0.0 && recharge_soc <= 1.0))
+    (recharge_soc >= 0.0 && recharge_threshold <= 1.0))
   {
     const rmf_task::Parameters parameters{
       *_pimpl->planner,
@@ -2845,13 +2593,12 @@ bool FleetUpdateHandle::set_task_planner_params(
       parameters,
       constraints,
       _pimpl->cost_calculator};
-    rmf_task::TaskPlanner::Options options{
+    const rmf_task::TaskPlanner::Options options{
       false,
       nullptr,
       // The finishing request is no longer handled by the planner, we handle
       // it separately as a waiting behavior now.
       nullptr};
-    options.task_assignment_strategy(task_assignment_strategy);
 
     _pimpl->worker.schedule(
       [w = weak_from_this(), task_config, options, idle_task](const auto&)
@@ -2872,9 +2619,7 @@ bool FleetUpdateHandle::set_task_planner_params(
         for (const auto& t : self->_pimpl->task_managers)
         {
           t.first->task_planner(self->_pimpl->task_planner);
-          // Skip setting idle task if there exists a robot-specific behavior
-          if (!t.first->robot_finishing_request())
-            t.second->set_idle_task(idle_task);
+          t.second->set_idle_task(idle_task);
         }
       });
 

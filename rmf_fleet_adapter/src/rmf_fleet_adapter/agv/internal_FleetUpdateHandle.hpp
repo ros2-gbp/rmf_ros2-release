@@ -18,8 +18,6 @@
 #ifndef SRC__RMF_FLEET_ADAPTER__AGV__INTERNAL_FLEETUPDATEHANDLE_HPP
 #define SRC__RMF_FLEET_ADAPTER__AGV__INTERNAL_FLEETUPDATEHANDLE_HPP
 
-#include <std_msgs/msg/string.hpp>
-
 #include <rmf_task_msgs/msg/loop.hpp>
 
 #include <rmf_task_ros2/bidding/AsyncBidder.hpp>
@@ -32,23 +30,24 @@
 #include <rmf_task/requests/Clean.hpp>
 #include <rmf_task/BinaryPriorityScheme.hpp>
 
+#include <rmf_task_sequence/Task.hpp>
+#include <rmf_task_sequence/Phase.hpp>
+#include <rmf_task_sequence/Event.hpp>
+#include <rmf_task_sequence/events/PerformAction.hpp>
+
 #include <rmf_building_map_msgs/msg/graph.hpp>
 
 #include <rmf_fleet_msgs/msg/dock_summary.hpp>
 #include <rmf_fleet_msgs/msg/lane_states.hpp>
 #include <rmf_fleet_msgs/msg/charging_assignments.hpp>
-#include <rmf_fleet_msgs/msg/emergency_signal.hpp>
-#include <rmf_zone_msgs/msg/zone_state.hpp>
-#include <std_msgs/msg/bool.hpp>
 
 #include <rmf_fleet_adapter/agv/FleetUpdateHandle.hpp>
 #include <rmf_fleet_adapter/StandardNames.hpp>
 
 #include "Node.hpp"
 #include "RobotContext.hpp"
-#include "internal_ZoneBounds.hpp"
-#include "../phases/Utils.hpp"
 #include "../TaskManager.hpp"
+#include "../DeserializeJSON.hpp"
 #include <rmf_websocket/BroadcastClient.hpp>
 
 #include <rmf_traffic/schedule/Mirror.hpp>
@@ -90,6 +89,38 @@ struct TaskActivation
 };
 
 //==============================================================================
+template<typename T>
+struct DeserializedDescription
+{
+  T description;
+  std::vector<std::string> errors;
+};
+
+//==============================================================================
+using DeserializedTask =
+  DeserializedDescription<std::shared_ptr<const rmf_task::Task::Description>>;
+
+//==============================================================================
+using TaskDescriptionDeserializer =
+  std::function<DeserializedTask(const nlohmann::json&)>;
+
+//==============================================================================
+using DeserializedPhase =
+  DeserializedDescription<
+  std::shared_ptr<const rmf_task_sequence::Phase::Description>
+  >;
+
+//==============================================================================
+using PhaseDescriptionDeserializer =
+  std::function<DeserializedPhase(const nlohmann::json&)>;
+
+//==============================================================================
+using DeserializedEvent =
+  DeserializedDescription<
+  std::shared_ptr<const rmf_task_sequence::Event::Description>
+  >;
+
+//==============================================================================
 using EventDescriptionDeserializer =
   std::function<DeserializedEvent(const nlohmann::json&)>;
 
@@ -98,34 +129,8 @@ using DeserializedPlace =
   DeserializedDescription<std::optional<rmf_traffic::agv::Plan::Goal>>;
 
 //==============================================================================
-using DeserializedZone =
-  DeserializedDescription<std::optional<std::string>>;
-
-//==============================================================================
-using DeserializedZoneWaypoint =
-  DeserializedDescription<std::optional<std::string>>;
-
-//==============================================================================
-using DeserializedZoneGroup =
-  DeserializedDescription<std::optional<std::string>>;
-
-//==============================================================================
 using PlaceDeserializer =
   std::function<DeserializedPlace(const nlohmann::json&)>;
-
-//==============================================================================
-using ZoneDeserializer =
-  std::function<DeserializedZone(const nlohmann::json&)>;
-
-//==============================================================================
-using ZoneWaypointDeserializer =
-  std::function<DeserializedZoneWaypoint(
-    const std::string& zone_name, const nlohmann::json&)>;
-
-//==============================================================================
-using ZoneGroupDeserializer =
-  std::function<DeserializedZoneGroup(
-    const std::string& zone_name, const nlohmann::json&)>;
 
 //==============================================================================
 struct TaskDeserialization
@@ -134,16 +139,12 @@ struct TaskDeserialization
   DeserializeJSONPtr<DeserializedPhase> phase;
   DeserializeJSONPtr<DeserializedEvent> event;
   PlaceDeserializer place;
-  ZoneDeserializer zone;
-  ZoneWaypointDeserializer zone_waypoint;
-  ZoneGroupDeserializer zone_group;
 
   std::shared_ptr<FleetUpdateHandle::ConsiderRequest> consider_pickup;
   std::shared_ptr<FleetUpdateHandle::ConsiderRequest> consider_dropoff;
   std::shared_ptr<FleetUpdateHandle::ConsiderRequest> consider_clean;
   std::shared_ptr<FleetUpdateHandle::ConsiderRequest> consider_patrol;
   std::shared_ptr<FleetUpdateHandle::ConsiderRequest> consider_composed;
-  std::shared_ptr<FleetUpdateHandle::ConsiderRequest> consider_zone;
   // Map category string to its ConsiderRequest for PerformAction events
   std::shared_ptr<std::unordered_map<
       std::string, FleetUpdateHandle::ConsiderRequest>> consider_actions;
@@ -295,15 +296,6 @@ public:
     std::shared_ptr<TaskManager>> task_managers = {};
 
   std::shared_ptr<rmf_websocket::BroadcastClient> broadcast_client = nullptr;
-
-  using FleetStateUpdateMsg = std_msgs::msg::String;
-  rclcpp::Publisher<FleetStateUpdateMsg>::SharedPtr fleet_state_update_pub =
-    nullptr;
-
-  using FleetLogUpdateMsg = std_msgs::msg::String;
-  rclcpp::Publisher<FleetLogUpdateMsg>::SharedPtr fleet_log_update_pub =
-    nullptr;
-
   // Map uri to schema for validator loader function
   std::unordered_map<std::string, nlohmann::json> schema_dictionary = {};
 
@@ -313,32 +305,23 @@ public:
   rclcpp::TimerBase::SharedPtr fleet_state_update_timer = nullptr;
   rclcpp::TimerBase::SharedPtr memory_trim_timer = nullptr;
 
-  rxcpp::subscription emergency_sub = {};
-  rxcpp::subscription target_emergency_sub = {};
-  rxcpp::subjects::subject<bool> emergency_publisher = {};
-  rxcpp::observable<bool> emergency_obs = {};
+  rxcpp::subscription emergency_sub;
+  rxcpp::subjects::subject<bool> emergency_publisher;
+  rxcpp::observable<bool> emergency_obs;
   bool emergency_active = false;
   // When an emergency (fire alarm) is active, this map says which level each
   // lift will "home" to (if any).
-  std::unordered_map<std::string, std::string> emergency_level_for_lift = {};
-  SharedPlanner emergency_planner = nullptr;
+  std::unordered_map<std::string, std::string> emergency_level_for_lift;
+  SharedPlanner emergency_planner;
 
   rclcpp::Subscription<rmf_fleet_msgs::msg::ChargingAssignments>::SharedPtr
     charging_assignments_sub = nullptr;
-
-  rclcpp::Subscription<rmf_zone_msgs::msg::ZoneState>::SharedPtr
-    zone_state_sub = nullptr;
-
-  // Metres past the zone edge a robot must be before the sweep releases it.
-  static constexpr double zone_release_margin = 0.5;
-
-  rclcpp::TimerBase::SharedPtr zone_release_sweep_timer = nullptr;
   using ChargingAssignments = rmf_fleet_msgs::msg::ChargingAssignments;
   using ChargingAssignment = rmf_fleet_msgs::msg::ChargingAssignment;
   // Keep track of charging assignments for robots that have not been registered
   // yet.
   std::unordered_map<std::string, ChargingAssignment>
-  unregistered_charging_assignments = {};
+  unregistered_charging_assignments;
 
   using DockParamMap =
     std::unordered_map<
@@ -364,9 +347,9 @@ public:
   // This is checked before and after the task reassignment procedure to ensure
   // that no new task came in from the dispatcher while the reassignment was
   // being calculated.
-  std::string last_bid_assignment = {};
-  std::vector<rmf_task::ConstRequestPtr> unassigned_requests = {};
-  rxcpp::schedulers::worker reassignment_worker = {};
+  std::string last_bid_assignment;
+  std::vector<rmf_task::ConstRequestPtr> unassigned_requests;
+  rxcpp::schedulers::worker reassignment_worker;
 
   using BidNoticeMsg = rmf_task_msgs::msg::BidNotice;
 
@@ -392,11 +375,8 @@ public:
   std::unordered_map<std::size_t, double> speed_limited_lanes = {};
   std::unordered_set<std::size_t> closed_lanes = {};
 
-  std::shared_ptr<AllocateTasks> calculate_bid = nullptr;
-  rmf_rxcpp::subscription_guard calculate_bid_subscription = {};
-
-  rclcpp::TimerBase::SharedPtr memory_utilization_timer = nullptr;
-  std::optional<std::size_t> planner_cache_reset_size = std::nullopt;
+  std::shared_ptr<AllocateTasks> calculate_bid;
+  rmf_rxcpp::subscription_guard calculate_bid_subscription;
 
   template<typename... Args>
   static std::shared_ptr<FleetUpdateHandle> make(Args&&... args)
@@ -419,24 +399,9 @@ public:
       {
         if (const auto self = w.lock())
         {
-          RCLCPP_WARN_ONCE(
-            self->_pimpl->node->get_logger(),
-            "This topic is getting deprecated soon. Please use the topic 'emergency_signal instead.");
           self->_pimpl->handle_emergency(msg->data);
         }
       });
-    handle->_pimpl->target_emergency_sub =
-      handle->_pimpl->node->target_emergency_notice()
-      .observe_on(rxcpp::identity_same_worker(handle->_pimpl->worker))
-      .subscribe(
-      [w = handle->weak_from_this()](const auto& msg)
-      {
-        if (const auto self = w.lock())
-        {
-          self->_pimpl->handle_target_emergency(msg);
-        }
-      });
-
     handle->_pimpl->emergency_planner =
       std::make_shared<std::shared_ptr<const rmf_traffic::agv::Planner>>(nullptr);
 
@@ -467,96 +432,6 @@ public:
     // memory-efficient.
     handle->_pimpl->memory_trim_timer = handle->_pimpl->node->create_wall_timer(
       std::chrono::minutes(5), []() { malloc_trim(0); });
-
-    // Zone booking release sweep.
-    handle->_pimpl->zone_release_sweep_timer =
-      handle->_pimpl->node->create_wall_timer(
-      std::chrono::seconds(2), [w = handle->weak_from_this()]()
-      {
-        const auto self = w.lock();
-        if (!self)
-          return;
-
-        for (const auto& [context, _] : self->_pimpl->task_managers)
-        {
-          if (!context)
-            continue;
-
-          if (!context->has_zone_bookings())
-            continue;
-
-          const auto& graph = context->navigation_graph();
-
-          Eigen::Vector2d robot_xy;
-          std::string robot_map;
-          try
-          {
-            const Eigen::Vector3d p = context->position();
-            robot_xy = p.block<2, 1>(0, 0);
-            robot_map = context->map();
-          }
-          catch (const std::exception& e)
-          {
-            RCLCPP_DEBUG(
-              self->_pimpl->node->get_logger(),
-              "Zone release sweep skipping [%s/%s]: %s",
-              context->group().c_str(), context->name().c_str(), e.what());
-            continue;
-          }
-
-          std::vector<std::string> to_release;
-
-          context->for_each_releasable_booking(
-            [&, context = context](const RobotContext::ZoneBooking& booking)
-            {
-              const auto zone = graph.find_known_zone(booking.zone_name);
-              if (!zone)
-              {
-                // The zone is no longer in the graph. Nothing can ever
-                // release this booking on geometry, so release it here.
-                RCLCPP_WARN(
-                  self->_pimpl->node->get_logger(),
-                  "Releasing booking for [%s/%s] in zone [%s]: that zone is "
-                  "no longer in the navigation graph",
-                  context->group().c_str(), context->name().c_str(),
-                  booking.zone_name.c_str());
-                to_release.push_back(booking.zone_name);
-                return;
-              }
-
-              const bool inside =
-                robot_map == zone->map()
-                && is_inside_zone(
-                  robot_xy,
-                  zone->location(),
-                  zone->orientation(),
-                  zone->dimensions(),
-                  zone_release_margin);
-
-              if (!inside)
-                to_release.push_back(booking.zone_name);
-            });
-
-          for (const auto& zone_name : to_release)
-          {
-            RCLCPP_INFO(
-              self->_pimpl->node->get_logger(),
-              "Zone release sweep: [%s/%s] left zone [%s] without an exit "
-              "event, releasing its booking",
-              context->group().c_str(), context->name().c_str(),
-              zone_name.c_str());
-
-            context->clear_zone_booking(
-              zone_name, RobotContext::ZoneTicketDisposal::HandBack);
-
-            // The handback above only forgets the ticket, so this is the
-            // only thing that tells the manager the robot has gone.
-            context->node()->zone_request()->publish(
-              phases::make_zone_exit_request(
-                context->group(), context->name(), zone_name));
-          }
-        }
-      });
 
     // Create subs and pubs for bidding
     auto transient_qos = rclcpp::QoS(10).transient_local();
@@ -656,13 +531,6 @@ public:
         });
     }
 
-    handle->_pimpl->fleet_state_update_pub =
-      handle->_pimpl->node->create_publisher<FleetStateUpdateMsg>(
-      FleetStateUpdateTopicName, reliable_transient_qos.keep_last(10));
-    handle->_pimpl->fleet_log_update_pub =
-      handle->_pimpl->node->create_publisher<FleetLogUpdateMsg>(
-      FleetLogUpdateTopicName, reliable_transient_qos.keep_last(100));
-
     // Add PerformAction event to deserialization
     auto validator = handle->_pimpl->deserialization.make_validator_shared(
       schemas::event_description__perform_action);
@@ -748,124 +616,8 @@ public:
           self->_pimpl->update_charging_assignments(assignments);
       });
 
-    handle->_pimpl->zone_state_sub =
-      handle->_pimpl->node->create_subscription<
-      rmf_zone_msgs::msg::ZoneState>(
-      ZoneStateTopicName,
-      rclcpp::QoS(10).transient_local().reliable(),
-      [w = handle->weak_from_this()](
-        const rmf_zone_msgs::msg::ZoneState::SharedPtr msg)
-      {
-        const auto self = w.lock();
-        if (!self)
-          return;
-
-        // Keep each booking's request_id current.
-        for (const auto& booking : msg->bookings)
-        {
-          for (const auto& [context, _] : self->_pimpl->task_managers)
-          {
-            if (context->name() != booking.robot_name
-              || context->group() != booking.fleet_name)
-              continue;
-
-            // The const binds the pointer, not the booking it points at.
-            const auto held = context->zone_booking(booking.zone_name);
-            if (held
-              && held->waypoint_name == booking.assigned_waypoint_name)
-            {
-              held->granted_under_request_id = booking.request_id;
-            }
-            break;
-          }
-        }
-
-        using Response = rmf_zone_msgs::msg::ZoneResponse;
-        for (const auto& response : msg->responses)
-        {
-          if (response.status != Response::REVOKED)
-            continue;
-
-          for (const auto& [context, _] : self->_pimpl->task_managers)
-          {
-            if (context->name() != response.robot_name
-              || context->group() != response.fleet_name)
-              continue;
-
-            // A revocation can arrive late, after the robot has been
-            // re-granted the same vertex. Only the id tells the two apart.
-            const auto booking = context->zone_booking(response.zone_name);
-            if (!booking
-              || booking->granted_under_request_id != response.request_id)
-            {
-              RCLCPP_DEBUG(context->node()->get_logger(),
-                "Ignoring stale revocation for [%s] at [%s] in zone [%s]: "
-                "request [%s] is not the one the current booking was granted "
-                "under [%s]",
-                response.robot_name.c_str(),
-                response.assigned_waypoint_name.c_str(),
-                response.zone_name.c_str(),
-                response.request_id.c_str(),
-                booking
-                  ? booking->granted_under_request_id.c_str() : "<none>");
-              break;
-            }
-
-            RCLCPP_WARN(context->node()->get_logger(),
-              "Zone booking revoked for [%s] at waypoint [%s] in zone [%s]: "
-              "%s",
-              response.robot_name.c_str(),
-              response.assigned_waypoint_name.c_str(),
-              response.zone_name.c_str(),
-              response.reason.c_str());
-
-            context->clear_zone_booking(
-              response.zone_name, RobotContext::ZoneTicketDisposal::Release);
-            break;
-          }
-        }
-      });
-
     handle->_pimpl->deserialization.event->add(
       "perform_action", validator, deserializer);
-
-    handle->_pimpl->memory_utilization_timer =
-      handle->_pimpl->node->create_wall_timer(
-      std::chrono::minutes(5), [w = handle->weak_from_this()]()
-      {
-        const auto self = w.lock();
-        if (!self)
-          return;
-
-        const auto& planner = *self->_pimpl->planner;
-        const auto audit = planner->cache_audit();
-        std::stringstream ss;
-        ss << audit;
-        RCLCPP_INFO(
-          self->_pimpl->node->get_logger(),
-          "%s",
-          ss.str().c_str());
-
-        const std::optional<std::size_t> reset_size =
-          self->_pimpl->planner_cache_reset_size;
-        if (reset_size.has_value())
-        {
-
-          const std::size_t cache_size_sum = audit.differential_drive_planner_cache_size()
-            + audit.shortest_path_cache_size()
-            + audit.euclidean_heuristic_cache_size();
-
-          if (cache_size_sum > *reset_size)
-          {
-            RCLCPP_INFO(
-              self->_pimpl->node->get_logger(),
-              "Resetting planner cache since it exceeded size limit of %zu",
-              *reset_size);
-            planner->clear_differential_drive_cache();
-            planner->clear_inner_cache();
-          }
-        }
-      });
 
     return handle;
   }
@@ -916,9 +668,7 @@ public:
 
   void update_fleet_state() const;
   void update_fleet_logs() const;
-  void handle_emergency(const bool is_emergency);
-  void handle_target_emergency(
-    std::shared_ptr<rmf_fleet_msgs::msg::EmergencySignal> is_emergency);
+  void handle_emergency(bool is_emergency);
   void update_emergency_planner();
 
   void update_charging_assignments(const ChargingAssignments& assignments);

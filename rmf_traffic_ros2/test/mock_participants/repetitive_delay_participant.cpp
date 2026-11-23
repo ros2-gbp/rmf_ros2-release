@@ -67,10 +67,7 @@ int main(int argc, char* argv[])
       }
 
       std::cout << "Applying delay" << std::endl;
-      const auto plan_id = participant->current_plan_id();
-      const auto current =
-        participant->cumulative_delay(plan_id).value_or(rmf_traffic::Duration(0));
-      participant->cumulative_delay(plan_id, current + 1s);
+      participant->delay(1s);
     });
 
   rclcpp::spin(node);

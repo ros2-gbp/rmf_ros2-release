@@ -67,9 +67,6 @@
 #include <rmf_api_msgs/schemas/commission.hpp>
 #include <rmf_api_msgs/schemas/robot_commission_request.hpp>
 #include <rmf_api_msgs/schemas/robot_commission_response.hpp>
-#include <rmf_api_msgs/schemas/task_estimate_result.hpp>
-#include <rmf_api_msgs/schemas/estimate_robot_task_request.hpp>
-#include <rmf_api_msgs/schemas/estimate_robot_task_response.hpp>
 
 namespace rmf_fleet_adapter {
 
@@ -195,15 +192,6 @@ TaskManagerPtr TaskManager::make(
         self->_handle_request(request->json_msg, request->request_id);
     });
 
-  auto reliable_transient_qos =
-    rclcpp::ServicesQoS().keep_last(10).reliable().transient_local();
-  mgr->_task_state_update_pub =
-    mgr->_context->node()->create_publisher<TaskStateUpdateMsg>(
-      TaskStateUpdateTopicName, reliable_transient_qos);
-  mgr->_task_log_update_pub =
-    mgr->_context->node()->create_publisher<TaskLogUpdateMsg>(
-      TaskLogUpdateTopicName, reliable_transient_qos.keep_last(100));
-
   const std::vector<nlohmann::json> schemas = {
     rmf_api_msgs::schemas::task_state,
     rmf_api_msgs::schemas::task_log,
@@ -234,10 +222,6 @@ TaskManagerPtr TaskManager::make(
     rmf_api_msgs::schemas::commission,
     rmf_api_msgs::schemas::robot_commission_request,
     rmf_api_msgs::schemas::robot_commission_response,
-    rmf_api_msgs::schemas::error,
-    rmf_api_msgs::schemas::task_estimate_result,
-    rmf_api_msgs::schemas::estimate_robot_task_request,
-    rmf_api_msgs::schemas::estimate_robot_task_response
   };
 
   for (const auto& schema : schemas)
@@ -288,23 +272,47 @@ const std::string& TaskManager::ActiveTask::id() const
   return _task->tag()->booking()->id();
 }
 
-//==============================================================================
-rmf_traffic::Duration TaskManager::ActiveTask::estimate_remaining_time() const
-{
-  if (!_task)
-    return rmf_traffic::Duration(0);
-  return _task->estimate_remaining_time();
-}
-
 namespace {
+
+//==============================================================================
+std::string status_to_string(rmf_task::Event::Status status)
+{
+  using Status = rmf_task::Event::Status;
+  switch (status)
+  {
+    case Status::Uninitialized:
+      return "uninitialized";
+    case Status::Blocked:
+      return "blocked";
+    case Status::Error:
+      return "error";
+    case Status::Failed:
+      return "failed";
+    case Status::Standby:
+      return "standby";
+    case Status::Underway:
+      return "underway";
+    case Status::Delayed:
+      return "delayed";
+    case Status::Skipped:
+      return "skipped";
+    case Status::Canceled:
+      return "canceled";
+    case Status::Killed:
+      return "killed";
+    case Status::Completed:
+      return "completed";
+    default:
+      return "uninitialized";
+  }
+}
 
 //==============================================================================
 nlohmann::json& copy_phase_data(
   nlohmann::json& phases,
   const rmf_task::Phase::Active& snapshot,
   rmf_task::Log::Reader& reader,
-  nlohmann::json& all_phase_logs,
-  bool quiet_cancel = false)
+  nlohmann::json& all_phase_logs)
 {
   const auto& tag = *snapshot.tag();
   const auto& header = tag.header();
@@ -337,11 +345,6 @@ nlohmann::json& copy_phase_data(
     auto& event_state = event_states[std::to_string(top->id())];
     event_state["id"] = top->id();
     event_state["status"] = status_to_string(top->status());
-    if (quiet_cancel && top->status() == rmf_task::Event::Status::Canceled)
-    {
-      event_state["status"] = status_to_string(
-        rmf_task::Event::Status::Completed);
-    }
 
     // TODO(MXG): Keep a VersionedString Reader to know when to actually update
     // this string
@@ -412,11 +415,7 @@ void copy_booking_data(
   {
     booking_json["labels"] = booking.labels();
   }
-  const auto priority = booking.priority();
-  if (priority)
-  {
-    booking_json["priority"] = booking.priority()->serialize();
-  }
+  // TODO(MXG): Add priority
 }
 
 //==============================================================================
@@ -486,7 +485,7 @@ void TaskManager::ActiveTask::publish_task_state(TaskManager& mgr)
   {
     const auto& snapshot = completed->snapshot();
     auto& phase = copy_phase_data(
-      phases, *snapshot, mgr._log_reader, phase_logs, _quiet_cancel);
+      phases, *snapshot, mgr._log_reader, phase_logs);
     phase["unix_millis_start_time"] =
       to_millis(completed->start_time().time_since_epoch()).count();
 
@@ -501,8 +500,7 @@ void TaskManager::ActiveTask::publish_task_state(TaskManager& mgr)
   if (active_phase == nullptr)
     return;
   auto& active =
-    copy_phase_data(
-    phases, *active_phase, mgr._log_reader, phase_logs, _quiet_cancel);
+    copy_phase_data(phases, *active_phase, mgr._log_reader, phase_logs);
   if (_task->active_phase_start_time().has_value())
   {
     active["unix_millis_start_time"] =
@@ -529,7 +527,7 @@ void TaskManager::ActiveTask::publish_task_state(TaskManager& mgr)
     }
   }
 
-  if (_cancellation.has_value() && !_quiet_cancel)
+  if (_cancellation.has_value())
     _state_msg["cancellation"] = *_cancellation;
 
   if (_killed.has_value())
@@ -545,17 +543,11 @@ void TaskManager::ActiveTask::publish_task_state(TaskManager& mgr)
     }
   }
 
-  if (_quiet_cancel &&
-    _task->status_overview() == rmf_task::Event::Status::Canceled)
-  {
-    _state_msg["status"] = status_to_string(rmf_task::Event::Status::Completed);
-  }
-
   task_state_update["data"] = _state_msg;
 
   static const auto task_update_validator =
     mgr._make_validator(rmf_api_msgs::schemas::task_state_update);
-  mgr._validate_and_publish_json(task_state_update, task_update_validator);
+  mgr._validate_and_publish_websocket(task_state_update, task_update_validator);
 
   auto task_log_update = nlohmann::json();
   task_log_update["type"] = "task_log_update";
@@ -563,7 +555,7 @@ void TaskManager::ActiveTask::publish_task_state(TaskManager& mgr)
 
   static const auto log_update_validator =
     mgr._make_validator(rmf_api_msgs::schemas::task_log_update);
-  mgr._validate_and_publish_json(task_log_update, log_update_validator);
+  mgr._validate_and_publish_websocket(task_log_update, log_update_validator);
 }
 
 //==============================================================================
@@ -724,25 +716,6 @@ void TaskManager::ActiveTask::rewind(uint64_t phase_id)
 }
 
 //==============================================================================
-void TaskManager::ActiveTask::quiet_cancel(
-  std::vector<std::string> labels,
-  rmf_traffic::Time time)
-{
-  if (_cancellation.has_value())
-    return;
-
-  nlohmann::json cancellation;
-  cancellation["unix_millis_request_time"] =
-    to_millis(time.time_since_epoch()).count();
-
-  cancellation["labels"] = std::move(labels);
-
-  _cancellation = std::move(cancellation);
-  _quiet_cancel = true;
-  _task->cancel();
-}
-
-//==============================================================================
 std::string TaskManager::ActiveTask::skip(
   uint64_t phase_id,
   std::vector<std::string> labels,
@@ -863,39 +836,15 @@ auto TaskManager::expected_finish_state() const -> State
   std::lock_guard<std::recursive_mutex> lock(_mutex);
   if (!_direct_queue.empty())
   {
-    rmf_task::State return_state = _direct_queue.rbegin()->assignment.finish_state();
-    if (_active_task && return_state.time().has_value())
-    {
-      // Shift the last queued direct task's finish time forward by the current active
-      // task's accumulated delay.
-      const auto projected_active_end =
-        _context->now() + _active_task.estimate_remaining_time();
-      const auto planned_active_end = _context->current_task_end_state().time();
-      if (planned_active_end.has_value()
-        && projected_active_end > *planned_active_end)
-      {
-        const auto shift = projected_active_end - *planned_active_end;
-        return_state.time(*return_state.time() + shift);
-      }
-    }
-    return_state.idle(false);
-    return return_state;
+    return _direct_queue.rbegin()->assignment.finish_state();
   }
 
   if (_active_task)
-  {
-    rmf_task::State return_state = _context->current_task_end_state();
-    const auto t = _context->now() + _active_task.estimate_remaining_time();
-    return_state.time(t);
-    return_state.idle(false);
-    return return_state;
-  }
+    return _context->current_task_end_state();
 
   rmf_task::State current_state =
     _context->make_get_state()()
-    .time(rmf_traffic_ros2::convert(_context->node()->now()))
-    .idle(true);
-
+    .time(rmf_traffic_ros2::convert(_context->node()->now()));
   return current_state;
 }
 
@@ -954,24 +903,6 @@ void TaskManager::set_idle_task(rmf_task::ConstRequestFactoryPtr task)
   {
     _begin_waiting();
   }
-}
-
-//==============================================================================
-void TaskManager::use_default_idle_task()
-{
-  auto fleet_handle = _fleet_handle.lock();
-  if (!fleet_handle)
-  {
-    RCLCPP_ERROR(
-      _context->node()->get_logger(),
-      "Attempting to use default idle task for [%s] but its fleet is shutting down",
-      _context->requester_id().c_str());
-    return;
-  }
-  const auto& impl =
-    agv::FleetUpdateHandle::Implementation::get(*fleet_handle);
-
-  set_idle_task(impl.idle_task);
 }
 
 //==============================================================================
@@ -1146,8 +1077,7 @@ TaskManager::RobotModeMsg TaskManager::robot_mode() const
     .mode(_active_task.is_finished() ?
       RobotModeMsg::MODE_IDLE :
       _context->current_mode())
-    .mode_request_id(0)
-    .performing_action("");
+    .mode_request_id(0);
 
   return mode;
 }
@@ -1174,157 +1104,6 @@ std::vector<nlohmann::json> TaskManager::task_log_updates() const
     }
   }
   return logs;
-}
-
-//==============================================================================
-nlohmann::json TaskManager::estimate_robot_task_request(
-  const nlohmann::json& request,
-  const nlohmann::json& initial_state,
-  const std::string& request_id)
-{
-  auto fleet_handle = _fleet_handle.lock();
-  if (!fleet_handle)
-  {
-    return _make_error_response(
-      18, "Shutdown", "The fleet adapter is shutting down");
-  }
-  const auto& fleet = _context->group();
-  const auto& impl =
-    agv::FleetUpdateHandle::Implementation::get(*fleet_handle);
-  std::vector<std::string> errors;
-  const auto new_request = impl.convert(request_id, request, errors);
-
-  if (!new_request)
-  {
-    RCLCPP_ERROR(
-      _context->node()->get_logger(),
-      "Unable to generate a valid request for direct task [%s]:\n%s",
-      request_id.c_str(),
-      request.dump().c_str());
-
-    nlohmann::json response_json;
-    response_json["success"] = false;
-    std::vector<nlohmann::json> json_errors = {};
-    for (const auto& e : errors)
-    {
-      RCLCPP_ERROR(_context->node()->get_logger(), "%s", e.c_str());
-      try
-      {
-        auto error = nlohmann::json::parse(e);
-        json_errors.push_back(error);
-      }
-      catch (const std::exception&)
-      {
-        json_errors.push_back(e);
-      }
-    }
-    response_json["errors"] = std::move(json_errors);
-
-    return response_json;
-  }
-  // Get finish state and deployment time
-  const auto task_planner = _context->task_planner();
-  if (!task_planner)
-  {
-    RCLCPP_ERROR(
-      _context->node()->get_logger(),
-      "Fleet [%s] is not configured with parameters for task planning."
-      "Use FleetUpdateHandle::set_task_planner_params(~) to set the "
-      "parameters required.", fleet.c_str());
-
-    return _make_error_response(
-      19, "Misconfigured",
-      "The fleet adapter is not configured for task planning");
-  }
-
-  // Convert JSON into rmf_task::State
-  rmf_task::State start_state;
-
-  if (initial_state.empty())
-    start_state = expected_finish_state();
-  else
-  {
-    if (std::size_t(initial_state["waypoint"].get<int>()) >
-      (_context->navigation_graph().num_waypoints() -1))
-    {
-      return _make_error_response(
-        20, "Invalid", "Invalid Task State");
-    }
-    start_state.waypoint(std::size_t(initial_state["waypoint"].get<int>()));
-    start_state.orientation(initial_state["orientation"].get<double>());
-    std::chrono::steady_clock::time_point dp_time(
-      rmf_traffic::time::from_seconds(initial_state["time"].get<double>()/
-      1000));
-    start_state.time(dp_time);
-    start_state.battery_soc(initial_state["battery_soc"].get<double>());
-  }
-
-
-  const auto& constraints = task_planner->configuration().constraints();
-  const auto& parameters = task_planner->configuration().parameters();
-  const auto model = new_request->description()->make_model(
-    new_request->booking()->earliest_start_time(),
-    parameters);
-  const auto estimate = model->estimate_finish(
-    start_state,
-    constraints,
-    *_travel_estimator);
-
-  rmf_task::State finish_state;
-  rmf_traffic::Time deployment_time;
-
-  if (!estimate.has_value())
-  {
-    RCLCPP_WARN(
-      _context->node()->get_logger(),
-      "Unable to estimate final state for direct task request [%s]. This may "
-      "be due to insufficient resources to perform the task.",
-      request_id.c_str());
-    return _make_error_response(
-      21, "Failed", "Failed Task Estimation");
-  }
-  else
-  {
-    finish_state = estimate.value().finish_state();
-    deployment_time = estimate.value().wait_until();
-  }
-
-
-  // calculate estimated duration of task
-  nlohmann::json result_json;
-
-  result_json["deployment_time"] =
-    to_millis(deployment_time.time_since_epoch()).count();
-
-  if (finish_state.time().has_value())
-  {
-    result_json["finish_time"] =
-      to_millis(finish_state.time().value().time_since_epoch()).count();
-
-    auto estimate_duration_rmf =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-      finish_state.time().value() - deployment_time);
-    result_json["duration"] = estimate_duration_rmf.count();
-  }
-
-  // Convert rmf_task::State into a JSON
-  nlohmann::json state;
-  if (!finish_state.waypoint().has_value() || !finish_state.orientation().has_value()
-    || !finish_state.battery_soc().has_value())
-  {
-    return _make_error_response(
-      21, "Failed", "Failed Task Estimation");
-  }
-
-  state["waypoint"] = int(finish_state.waypoint().value());
-  state["orientation"] = finish_state.orientation().value();
-  state["battery_soc"] = finish_state.battery_soc().value();
-
-  result_json["state"] = state;
-  nlohmann::json response_json;
-  response_json["success"] = true;
-  response_json["result"] = result_json;
-  return response_json;
 }
 
 //==============================================================================
@@ -1450,15 +1229,6 @@ nlohmann::json TaskManager::submit_direct_request(
     request_id.c_str(),
     robot.c_str());
 
-  _context->worker().schedule([w = weak_from_this()](const auto&)
-    {
-      if (const auto self = w.lock())
-      {
-        // Schedule this manager to check if it should run this task.
-        self->_begin_next_task();
-      }
-    });
-
   // Publish api response
   nlohmann::json response_json;
   response_json["success"] = true;
@@ -1558,11 +1328,6 @@ bool TaskManager::cancel_task(
 {
   if (_active_task && _active_task.id() == task_id)
   {
-    if (_emergency_active)
-    {
-      return false;
-    }
-
     _task_state_update_available = true;
     _active_task.cancel(std::move(labels), _context->now());
     return true;
@@ -1587,11 +1352,6 @@ bool TaskManager::kill_task(
 {
   if (_active_task && _active_task.id() == task_id)
   {
-    if (_emergency_active)
-    {
-      return false;
-    }
-
     _task_state_update_available = true;
     _active_task.kill(std::move(labels), _context->now());
     return true;
@@ -1603,26 +1363,6 @@ bool TaskManager::kill_task(
 
   if (_cancel_task_from_direct_queue(task_id, labels))
     return true;
-
-  return false;
-}
-
-//==============================================================================
-bool TaskManager::quiet_cancel_task(
-  const std::string& task_id,
-  std::vector<std::string> labels)
-{
-  if (_active_task && _active_task.id() == task_id)
-  {
-    if (_emergency_active)
-    {
-      return false;
-    }
-
-    _task_state_update_available = true;
-    _active_task.quiet_cancel(std::move(labels), _context->now());
-    return true;
-  }
 
   return false;
 }
@@ -1739,9 +1479,7 @@ void TaskManager::_begin_next_task()
         [w = weak_from_this()](const auto&)
         {
           if (const auto self = w.lock())
-          {
             self->_begin_next_task();
-          }
         });
 
       return;
@@ -1909,16 +1647,9 @@ void TaskManager::_begin_waiting()
   }
 
   if (!_responsive_wait_enabled)
-  {
-    if (_waiting)
-    {
-      _waiting.cancel({"Idle behavior updated"}, _context->now());
-    }
     return;
-  }
 
-  const auto location = _context->location();
-  if (location.empty())
+  if (_context->location().empty())
   {
     RCLCPP_WARN(
       _context->node()->get_logger(),
@@ -1929,10 +1660,10 @@ void TaskManager::_begin_waiting()
   }
 
   // Determine the waypoint closest to the robot
-  std::size_t waiting_point = location.front().waypoint();
+  std::size_t waiting_point = _context->location().front().waypoint();
   double min_dist = std::numeric_limits<double>::max();
   const auto& robot_position = _context->position();
-  for (const auto& start : location)
+  for (const auto& start : _context->location())
   {
     const auto waypoint = start.waypoint();
     const auto& waypoint_location =
@@ -1990,7 +1721,6 @@ void TaskManager::_resume_from_emergency()
       }
 
       self->_emergency_pullover = ActiveTask();
-      self->_context->current_task_id(std::nullopt);
 
       if (!self->_emergency_pullover_interrupt_token.has_value())
       {
@@ -2005,13 +1735,6 @@ void TaskManager::_resume_from_emergency()
           {"emergency finished"},
           self->_context->now());
         self->_emergency_pullover_interrupt_token = std::nullopt;
-
-        RCLCPP_INFO(
-          self->_context->node()->get_logger(),
-          "Resume execution of task [%s] for [%s] after emergency pullover",
-          self->_active_task.id().c_str(),
-          self->_context->requester_id().c_str());
-        self->_context->current_task_id(self->_active_task.id());
       }
       else
       {
@@ -2255,6 +1978,40 @@ void TaskManager::_run_emergency_charge_task()
 }
 
 //==============================================================================
+void TaskManager::_populate_task_summary(
+  std::shared_ptr<LegacyTask> task,
+  uint32_t task_summary_state,
+  TaskManager::TaskSummaryMsg& msg)
+{
+  if (task == nullptr) // ResponsiveWait
+  {
+    msg.task_id = _context->requester_id() + ":waiting";
+
+    msg.start_time = _context->node()->now();
+    msg.end_time = _queue.empty() ? msg.start_time : rmf_traffic_ros2::convert(
+      _queue.front().deployment_time());
+    // Make the task type explicit
+    msg.task_profile.description.task_type.type =
+      rmf_task_msgs::msg::TaskType::TYPE_STATION;
+  }
+
+  else
+  {
+    msg.task_id = task->id();
+    msg.start_time = rmf_traffic_ros2::convert(
+      task->deployment_time());
+    msg.end_time = rmf_traffic_ros2::convert(
+      task->finish_state().time().value());
+    msg.task_profile = task->task_profile();
+  }
+
+  msg.fleet_name = _context->description().owner();
+  msg.robot_name = _context->name();
+
+  msg.state = task_summary_state;
+}
+
+//==============================================================================
 void TaskManager::_schema_loader(
   const nlohmann::json_uri& id, nlohmann::json& value) const
 {
@@ -2271,7 +2028,7 @@ void TaskManager::_schema_loader(
 }
 
 //==============================================================================
-void TaskManager::_validate_and_publish_json(
+void TaskManager::_validate_and_publish_websocket(
   const nlohmann::json& msg,
   const nlohmann::json_schema::json_validator& validator) const
 {
@@ -2286,32 +2043,19 @@ void TaskManager::_validate_and_publish_json(
     return;
   }
 
-  if (_broadcast_client.has_value())
-  {
-    const auto client = _broadcast_client->lock();
-    if (!client)
-    {
-      RCLCPP_ERROR(
-        _context->node()->get_logger(),
-        "Unable to lock BroadcastClient within TaskManager of robot [%s]",
-        _context->name().c_str());
-      return;
-    }
-    client->publish(msg);
-  }
+  if (!_broadcast_client.has_value())
+    return;
 
-  if (msg["type"] == "task_state_update")
+  const auto client = _broadcast_client->lock();
+  if (!client)
   {
-    TaskStateUpdateMsg update_msg;
-    update_msg.data = msg.dump();
-    _task_state_update_pub->publish(update_msg);
+    RCLCPP_ERROR(
+      _context->node()->get_logger(),
+      "Unable to lock BroadcastClient within TaskManager of robot [%s]",
+      _context->name().c_str());
+    return;
   }
-  else if (msg["type"] == "task_log_update")
-  {
-    TaskLogUpdateMsg update_msg;
-    update_msg.data = msg.dump();
-    _task_log_update_pub->publish(update_msg);
-  }
+  client->publish(msg);
 }
 
 //==============================================================================
@@ -2413,7 +2157,7 @@ rmf_task::State TaskManager::_publish_pending_task(
   static const auto validator =
     _make_validator(rmf_api_msgs::schemas::task_state_update);
 
-  _validate_and_publish_json(task_state_update, validator);
+  _validate_and_publish_websocket(task_state_update, validator);
 
   _pending_task_info[pending.request()] = cache;
   return pending.finish_state();
@@ -2480,7 +2224,7 @@ void TaskManager::_publish_canceled_pending_task(
   static const auto validator =
     _make_validator(rmf_api_msgs::schemas::task_state_update);
 
-  _validate_and_publish_json(task_state_update, validator);
+  _validate_and_publish_websocket(task_state_update, validator);
 }
 
 //==============================================================================
@@ -2766,9 +2510,7 @@ std::function<void()> TaskManager::_task_finished(std::string id)
         [w = self->weak_from_this()](const auto&)
         {
           if (const auto self = w.lock())
-          {
             self->_begin_next_task();
-          }
         });
     };
 }
@@ -2821,8 +2563,6 @@ void TaskManager::_handle_request(
       _handle_direct_request(request_json, request_id);
     else if (type_str == "robot_commission_request")
       _handle_commission_request(request_json, request_id);
-    else if (type_str == "estimate_robot_task_request")
-      _handle_estimate_robot_task_request(request_json, request_id);
     else
       return;
   }
@@ -2832,41 +2572,6 @@ void TaskManager::_handle_request(
       _context->node()->get_logger(),
       "Encountered exception while handling a request: %s", e.what());
   }
-}
-
-//==============================================================================
-void TaskManager::_handle_estimate_robot_task_request(
-  const nlohmann::json& request_json,
-  const std::string& request_id)
-{
-  // TODO: Add a validator for estimate_task_request
-  static auto request_validator =
-    _make_validator(rmf_api_msgs::schemas::estimate_robot_task_request);
-
-  static auto response_validator =
-    _make_validator(rmf_api_msgs::schemas::estimate_robot_task_response);
-
-  if (!_validate_request_message(request_json, request_validator, request_id))
-    return;
-
-  const auto& robot = request_json["robot"].get<std::string>();
-  if (robot.empty() || robot != _context->name())
-    return;
-
-  const auto& fleet = request_json["fleet"].get<std::string>();
-  if (fleet.empty() || fleet != _context->group())
-    return;
-
-  const nlohmann::json& task_request = request_json["request"];
-  const nlohmann::json& state = (request_json.find("state") == request_json.end()) ?
-    nlohmann::json({}) : request_json["state"];
-
-  const auto response = estimate_robot_task_request(
-    task_request,
-    state,
-    request_id);
-
-  _validate_and_publish_api_response(response, response_validator, request_id);
 }
 
 //==============================================================================
@@ -3079,11 +2784,6 @@ void TaskManager::_handle_interrupt_request(
 
   if (_active_task && _active_task.id() == task_id)
   {
-    if (_emergency_active)
-    {
-      return;
-    }
-
     _task_state_update_available = true;
     return _send_token_success_response(
       _active_task.add_interruption(
@@ -3109,11 +2809,6 @@ void TaskManager::_handle_resume_request(
 
   if (_active_task && _active_task.id() == task_id)
   {
-    if (_emergency_active)
-    {
-      return;
-    }
-
     _task_state_update_available = true;
     auto unknown_tokens = _active_task.remove_interruption(
       request_json["for_tokens"].get<std::vector<std::string>>(),
@@ -3154,11 +2849,6 @@ void TaskManager::_handle_rewind_request(
 
   if (_active_task && _active_task.id() == task_id)
   {
-    if (_emergency_active)
-    {
-      return;
-    }
-
     _task_state_update_available = true;
     _active_task.rewind(request_json["phase_id"].get<uint64_t>());
     return _send_simple_success_response(request_id);
@@ -3182,12 +2872,6 @@ void TaskManager::_handle_skip_phase_request(
 
   if (_active_task && _active_task.id() == task_id)
   {
-
-    if (_emergency_active)
-    {
-      return;
-    }
-
     _task_state_update_available = true;
     return _send_token_success_response(
       _active_task.skip(
@@ -3211,15 +2895,10 @@ void TaskManager::_handle_undo_skip_phase_request(
   if (!_validate_request_message(request_json, request_validator, request_id))
     return;
 
-  const auto& task_id = request_json["for_task"].get<std::string>();
+  const auto& task_id = request_json["for_task"];
 
   if (_active_task && _active_task.id() == task_id)
   {
-    if (_emergency_active)
-    {
-      return;
-    }
-
     _task_state_update_available = true;
     auto unknown_tokens = _active_task.remove_skips(
       request_json["for_tokens"].get<std::vector<std::string>>(),

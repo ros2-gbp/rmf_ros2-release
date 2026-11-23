@@ -103,15 +103,13 @@ SCENARIO_METHOD(MockAdapterFixture, "request lift phase", "[phases]")
       CHECK(test->received_requests.front().destination_floor == destination);
     }
 
-    THEN("it should continuously send lift requests when the lift state has the target lift name")
+    THEN("it should continuously send lift requests while lift states arrive")
     {
       auto t = std::thread([&]()
           {
             for (std::size_t i = 0; i < 10; ++i)
             {
-              LiftState state;
-              state.lift_name = lift_name;
-              lift_state_pub->publish(state);
+              lift_state_pub->publish(LiftState());
               std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
           });

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.5.0)
 
 project(rmf_fleet_adapter)
 
@@ -25,7 +25,6 @@ include(GNUInstallDirs)
 
 set(dep_pkgs
   rclcpp
-  rclcpp_action
   rclcpp_components
   rmf_utils
   rmf_dispenser_msgs
@@ -39,8 +38,6 @@ set(dep_pkgs
   rmf_battery
   rmf_task
   rmf_task_sequence
-  rmf_reservation_msgs
-  rmf_zone_msgs
   std_msgs
   rmf_api_msgs
   rmf_websocket
@@ -51,18 +48,6 @@ set(dep_pkgs
 foreach(pkg ${dep_pkgs})
   find_package(${pkg} REQUIRED)
 endforeach()
-
-if(TARGET nlohmann_json_schema_validator)
-  set(json_schema_validator_target nlohmann_json_schema_validator)
-else()
-  set(json_schema_validator_target nlohmann_json_schema_validator::validator)
-endif()
-
-# Backward compatibility for yaml-cpp 0.7 that exports a yaml-cpp target
-# while 0.8.0 and above export yaml-cpp::yaml-cpp
-if (TARGET yaml-cpp)
-  add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp)
-endif()
 
 # Disable uncrustify tests by default.
 set(TEST_UNCRUSTIFY "Off")
@@ -91,31 +76,32 @@ add_library(rmf_fleet_adapter SHARED
   ${rmf_fleet_adapter_srcs}
 )
 
+ament_target_dependencies(rmf_fleet_adapter
+  PUBLIC
+    rmf_traffic_ros2
+    rmf_task_ros2
+    yaml-cpp
+    rmf_fleet_msgs
+    rmf_task_msgs
+    rmf_door_msgs
+    rmf_lift_msgs
+    rmf_dispenser_msgs
+    rmf_ingestor_msgs
+    rmf_building_map_msgs
+    rclcpp
+)
+
 target_link_libraries(rmf_fleet_adapter
   PUBLIC
-    rclcpp::rclcpp
-    rclcpp_action::rclcpp_action
-    rmf_battery::rmf_battery
     rmf_task::rmf_task
     rmf_task_sequence::rmf_task_sequence
-    rmf_task_ros2::rmf_task_ros2
-    rmf_traffic_ros2::rmf_traffic_ros2
-    ${rmf_building_map_msgs_TARGETS}
-    ${rmf_dispenser_msgs_TARGETS}
-    ${rmf_door_msgs_TARGETS}
-    ${rmf_fleet_msgs_TARGETS}
-    ${rmf_ingestor_msgs_TARGETS}
-    ${rmf_lift_msgs_TARGETS}
-    ${rmf_reservation_msgs_TARGETS}
-    ${rmf_zone_msgs_TARGETS}
-    ${rmf_task_msgs_TARGETS}
-    yaml-cpp::yaml-cpp
+    rmf_battery::rmf_battery
   PRIVATE
     rmf_rxcpp
     rmf_websocket::rmf_websocket
     nlohmann_json::nlohmann_json
     rmf_api_msgs::rmf_api_msgs
-    ${json_schema_validator_target}
+    nlohmann_json_schema_validator
 )
 
 target_include_directories(rmf_fleet_adapter
@@ -123,6 +109,16 @@ target_include_directories(rmf_fleet_adapter
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/rmf_api_generate_schema_headers/include> # for auto-generated schema headers
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+  PRIVATE
+    ${rmf_door_msgs_INCLUDE_DIRS}
+    ${rmf_lift_msgs_INCLUDE_DIRS}
+    ${rmf_dispenser_msgs_INCLUDE_DIRS}
+    ${rmf_ingestor_msgs_INCLUDE_DIRS}
+    ${rmf_api_msgs_INCLUDE_DIRS}
+    ${rmf_websocket_INCLUDE_DIR}
+    ${rmf_traffic_ros2_INCLUDE_DIRS}
+    ${rmf_building_map_msgs_INCLUDE_DIRS}
+    ${nlohmann_json_schema_validator_INCLUDE_DIRS}
 )
 
 if (BUILD_TESTING)
@@ -138,7 +134,6 @@ if (BUILD_TESTING)
       test/phases/test_RequestLift.cpp
       test/phases/test_DispenseItem.cpp
       test/phases/test_IngestItem.cpp
-      test/events/test_ExecutePlan.cpp
       test/services/test_FindEmergencyPullover.cpp
       test/services/test_FindPath.cpp
       test/services/test_Negotiate.cpp
@@ -147,30 +142,32 @@ if (BUILD_TESTING)
       test/test_Task.cpp
     TIMEOUT 300
   )
+  ament_target_dependencies(test_rmf_fleet_adapter
+    PUBLIC
+      rmf_task_msgs
+      rmf_door_msgs
+      rmf_lift_msgs
+      rmf_dispenser_msgs
+      rmf_ingestor_msgs
+      std_msgs
+      rmf_building_map_msgs
+      rmf_websocket
+  )
   target_include_directories(test_rmf_fleet_adapter
     PRIVATE
       # private includes of rmf_fleet_adapter
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/rmf_fleet_adapter>
+      ${rmf_api_msgs_INCLUDE_DIRS}
+      ${nlohmann_json_schema_validator_INCLUDE_DIRS}
   )
   target_link_libraries(test_rmf_fleet_adapter
-    PUBLIC
-      ${rmf_building_map_msgs_TARGETS}
-      ${rmf_dispenser_msgs_TARGETS}
-      ${rmf_door_msgs_TARGETS}
-      ${rmf_ingestor_msgs_TARGETS}
-      ${rmf_lift_msgs_TARGETS}
-      ${rmf_reservation_msgs_TARGETS}
-      ${rmf_zone_msgs_TARGETS}
-      ${rmf_task_msgs_TARGETS}
-      rmf_websocket::rmf_websocket
-      ${std_msgs_TARGETS}
     PRIVATE
       # private libraries of rmf_fleet_adapter
       rmf_rxcpp
       rmf_fleet_adapter
       rmf_utils::rmf_utils
       rmf_api_msgs::rmf_api_msgs
-      ${json_schema_validator_target}
+      nlohmann_json_schema_validator
   )
 
   target_compile_definitions(test_rmf_fleet_adapter
@@ -210,8 +207,14 @@ add_executable(full_control src/full_control/main.cpp)
 target_link_libraries(full_control
   PRIVATE
     rmf_fleet_adapter
-    ${rmf_fleet_msgs_TARGETS}
-    ${rmf_task_msgs_TARGETS}
+    ${rmf_fleet_msgs_LIBRARIES}
+    ${rmf_task_msgs_LIBRARIES}
+)
+
+target_include_directories(full_control
+  PRIVATE
+    ${rmf_fleet_msgs_INCLUDE_DIRS}
+    ${rmf_task_msgs_INCLUDE_DIRS}
 )
 
 # -----------------------------------------------------------------------------
@@ -221,8 +224,14 @@ add_executable(mock_traffic_light src/mock_traffic_light/main.cpp)
 target_link_libraries(mock_traffic_light
   PRIVATE
     rmf_fleet_adapter
-    ${rmf_task_msgs_TARGETS}
-    ${rmf_fleet_msgs_TARGETS}
+    ${rmf_task_msgs_LIBRARIES}
+    ${rmf_fleet_msgs_LIBRARIES}
+)
+
+target_include_directories(mock_traffic_light
+  PRIVATE
+    ${rmf_task_msgs_INCLUDE_DIRS}
+    ${rmf_fleet_msgs_INCLUDE_DIRS}
 )
 
 # -----------------------------------------------------------------------------
@@ -235,26 +244,16 @@ add_executable(lift_supervisor
 target_link_libraries(lift_supervisor
   PRIVATE
     rmf_fleet_adapter
-    rclcpp::rclcpp
-    ${rmf_lift_msgs_TARGETS}
-    ${std_msgs_TARGETS}
+    ${rclcpp_LIBARRIES}
+    ${rmf_lift_msgs_LIBRARIES}
+    ${std_msgs_LIBRARIES}
 )
 
-# -----------------------------------------------------------------------------
-
-add_executable(zone_manager
-  src/zone_manager/main.cpp
-  src/zone_manager/Node.cpp
-  src/zone_manager/ZoneReservationClient.cpp
-)
-
-target_link_libraries(zone_manager
+target_include_directories(lift_supervisor
   PRIVATE
-    rmf_fleet_adapter
-    rclcpp::rclcpp
-    ${rmf_zone_msgs_TARGETS}
-    ${rmf_building_map_msgs_TARGETS}
-    ${rmf_reservation_msgs_TARGETS}
+    ${rclcpp_INCLUDE_DIRS}
+    ${rmf_lift_msgs_INCLUDE_DIRS}
+    ${std_msgs_INCLUDE_DIRS}
 )
 
 # -----------------------------------------------------------------------------
@@ -266,8 +265,14 @@ add_executable(mutex_group_supervisor
 target_link_libraries(mutex_group_supervisor
   PRIVATE
     rmf_fleet_adapter
-    rclcpp::rclcpp
-    ${rmf_fleet_msgs_TARGETS}
+    ${rclcpp_LIBARRIES}
+    ${rmf_fleet_msgs_LIBRARIES}
+)
+
+target_include_directories(mutex_group_supervisor
+  PRIVATE
+    ${rclcpp_INCLUDE_DIRS}
+    ${rmf_fleet_msgs_INCLUDE_DIRS}
 )
 
 # -----------------------------------------------------------------------------
@@ -278,10 +283,17 @@ add_executable(experimental_lift_watchdog
 
 target_link_libraries(experimental_lift_watchdog
   PRIVATE
-    rclcpp::rclcpp
-    ${rmf_fleet_msgs_TARGETS}
-    ${std_msgs_TARGETS}
+    ${rclcpp_LIBRARIES}
+    ${rmf_fleet_msgs_LIBRARIES}
+    ${std_msgs_LIBRARIES}
     Threads::Threads
+)
+
+target_include_directories(experimental_lift_watchdog
+  PRIVATE
+    ${rclcpp_INCLUDE_DIRS}
+    ${rmf_fleet_msgs_INCLUDE_DIRS}
+    ${std_msgs_INCLUDE_DIRS}
 )
 
 # -----------------------------------------------------------------------------
@@ -294,8 +306,14 @@ add_executable(door_supervisor
 target_link_libraries(door_supervisor
   PRIVATE
     rmf_fleet_adapter
-    rclcpp::rclcpp
-    ${rmf_door_msgs_TARGETS}
+    ${rclcpp_LIBRARIES}
+    ${rmf_door_msgs_LIBRARIES}
+)
+
+target_include_directories(door_supervisor
+  PRIVATE
+    ${rclcpp_INCLUDE_DIRS}
+    ${rmf_door_msgs_INCLUDE_DIRS}
 )
 
 # -----------------------------------------------------------------------------
@@ -307,7 +325,9 @@ add_library(robot_state_aggregator_main SHARED
 target_include_directories(robot_state_aggregator_main
   PRIVATE
     include
-)
+    ${rclcpp_INCLUDE_DIRS}
+    ${rmf_fleet_msgs_INCLUDE_DIRS}
+    ${stubborn_buddies_msgs_INCLUDE_DIRS})
 
 target_compile_definitions(robot_state_aggregator_main
   PRIVATE "COMPOSITION_BUILDING_DLL"
@@ -316,27 +336,27 @@ target_compile_definitions(robot_state_aggregator_main
 
 if(DEFINED ENV{RMF_ENABLE_FAILOVER})
   if($ENV{RMF_ENABLE_FAILOVER} EQUAL 1)
-    target_link_libraries(robot_state_aggregator_main
-      rclcpp::rclcpp
-      rclcpp_components::component
-      ${std_msgs_TARGETS}
-      ${stubborn_buddies_msgs_TARGETS}
-      ${rmf_fleet_msgs_TARGETS}
+    ament_target_dependencies(robot_state_aggregator_main
+      "rclcpp"
+      "rclcpp_components"
+      "std_msgs"
+      "stubborn_buddies_msgs"
+      "rmf_fleet_msgs"
     )
   else()
-    target_link_libraries(robot_state_aggregator_main
-      rclcpp::rclcpp
-      rclcpp_components::component
-      ${std_msgs_TARGETS}
-      ${rmf_fleet_msgs_TARGETS}
+    ament_target_dependencies(robot_state_aggregator_main
+      "rclcpp"
+      "rclcpp_components"
+      "std_msgs"
+      "rmf_fleet_msgs"
     )
   endif()
 else()
-  target_link_libraries(robot_state_aggregator_main
-    rclcpp::rclcpp
-    rclcpp_components::component
-    ${std_msgs_TARGETS}
-    ${rmf_fleet_msgs_TARGETS}
+  ament_target_dependencies(robot_state_aggregator_main
+    "rclcpp"
+    "rclcpp_components"
+    "std_msgs"
+    "rmf_fleet_msgs"
   )
 endif()
 
@@ -379,10 +399,12 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 target_link_libraries(robot_state_aggregator
-  ${robot_state_aggregator_main_libs}
-  rclcpp::rclcpp
-  rclcpp_components::component
-  class_loader::class_loader
+  ${robot_state_aggregator_main_libs})
+
+ament_target_dependencies(robot_state_aggregator
+  "class_loader"
+  "rclcpp"
+  "rclcpp_components"
 )
 
 # -----------------------------------------------------------------------------
@@ -405,8 +427,33 @@ add_executable(dump_fleet_states
 target_link_libraries(dump_fleet_states
   PRIVATE
     rmf_fleet_adapter
-    rclcpp::rclcpp
-    ${rmf_fleet_msgs_TARGETS}
+    ${rclcpp_LIBRARIES}
+    ${rmf_fleet_msgs_LIBRARIES}
+)
+
+target_include_directories(dump_fleet_states
+  PRIVATE
+    ${rclcpp_INCLUDE_DIRS}
+    ${rmf_fleet_msgs_INCLUDE_DIRS}
+)
+
+# -----------------------------------------------------------------------------
+
+add_executable(task_aggregator
+  src/task_aggregator/main.cpp
+)
+
+target_link_libraries(task_aggregator
+  PRIVATE
+    rmf_fleet_adapter
+    ${rclcpp_LIBRARIES}
+    ${rmf_task_msgs_LIBRARIES}
+)
+
+target_include_directories(task_aggregator
+  PRIVATE
+    ${rclcpp_INCLUDE_DIRS}
+    ${rmf_task_msgs_INCLUDE_DIRS}
 )
 
 # -----------------------------------------------------------------------------
@@ -415,9 +462,14 @@ add_executable(open_lanes src/open_lanes/main.cpp)
 
 target_link_libraries(open_lanes
   PRIVATE
-    ${rmf_fleet_msgs_TARGETS}
+    ${rmf_fleet_msgs_LIBRARIES}
     rclcpp::rclcpp
     rmf_fleet_adapter
+)
+
+target_include_directories(open_lanes
+  PRIVATE
+    ${rmf_fleet_msgs_INCLUDE_DIRS}
 )
 
 # -----------------------------------------------------------------------------
@@ -426,9 +478,14 @@ add_executable(close_lanes src/close_lanes/main.cpp)
 
 target_link_libraries(close_lanes
   PRIVATE
-    ${rmf_fleet_msgs_TARGETS}
+    ${rmf_fleet_msgs_LIBRARIES}
     rclcpp::rclcpp
     rmf_fleet_adapter
+)
+
+target_include_directories(close_lanes
+  PRIVATE
+    ${rmf_fleet_msgs_INCLUDE_DIRS}
 )
 
 # -----------------------------------------------------------------------------
@@ -437,9 +494,14 @@ add_executable(interrupt_robot src/interrupt_robot/main.cpp)
 
 target_link_libraries(interrupt_robot
   PRIVATE
-    ${rmf_fleet_msgs_TARGETS}
+    ${rmf_fleet_msgs_LIBRARIES}
     rclcpp::rclcpp
     rmf_fleet_adapter
+)
+
+target_include_directories(interrupt_robot
+  PRIVATE
+    ${rmf_fleet_msgs_INCLUDE_DIRS}
 )
 
 # -----------------------------------------------------------------------------
@@ -451,38 +513,31 @@ rmf_api_generate_schema_headers(
 
 # -----------------------------------------------------------------------------
 
-ament_export_targets(export_rmf_fleet_adapter HAS_LIBRARY_TARGET)
+ament_export_targets(rmf_fleet_adapter HAS_LIBRARY_TARGET)
 ament_export_dependencies(${dep_pkgs})
 
-# Install the libraries
 install(
   TARGETS
     rmf_fleet_adapter
-  EXPORT export_rmf_fleet_adapter
-  RUNTIME DESTINATION lib/rmf_fleet_adapter
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
-)
-
-# Install the binaries
-install(
-  TARGETS
     read_only
     read_only_blockade
     mock_traffic_light
     full_control
     lift_supervisor
-    zone_manager
     mutex_group_supervisor
     experimental_lift_watchdog
     door_supervisor
     robot_state_aggregator
     test_read_only_adapter
+    task_aggregator
     open_lanes
     close_lanes
     interrupt_robot
     robot_state_aggregator_main
-  DESTINATION lib/rmf_fleet_adapter
+  EXPORT rmf_fleet_adapter
+  RUNTIME DESTINATION lib/rmf_fleet_adapter
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
 )
 
 # -----------------------------------------------------------------------------

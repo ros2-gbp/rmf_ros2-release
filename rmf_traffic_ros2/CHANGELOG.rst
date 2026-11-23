@@ -2,67 +2,19 @@
 Changelog for package rmf_traffic_ros2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.15.0 (2026-11-13)
--------------------
-* fix old cmake target for websocket and update other cmake vars (`#580 <https://github.com/open-rmf/rmf_ros2/issues/580>`_)
-* Add GoToZone feature (`#516 <https://github.com/open-rmf/rmf_ros2/issues/516>`_)
-  Co-authored-by: kjchee <keai_jiang_chee@cgh.com.sg>
-  Co-authored-by: Loke Ji Xian <loke_ji_xian@cgh.com.sg>
-  Co-authored-by: Tey Leong Teck <leong_teck_tey@cgh.com.sg>
-  Co-authored-by: Michael X. Grey <mxgrey@intrinsic.ai>
-* Fix typos in docs, launch args, log messages and comments (`#568 <https://github.com/open-rmf/rmf_ros2/issues/568>`_)
-  Co-authored-by: Mosiwon <Lots-ninety-nine@users.noreply.github.com>
-* Contributors: Aaron Chong, Mosiwon, chart
-
-2.14.0 (2026-09-26)
--------------------
-* Set schedule node ID when changes are explicitly requested (`#538 <https://github.com/open-rmf/rmf_ros2/issues/538>`_)
-  This fixes the issue reported by `#537 <https://github.com/open-rmf/rmf_ros2/issues/537>`_
-  Thanks @amerm for identifying the cause and providing the solution.
-* Contributors: Grey
-
-2.13.0 (2026-06-15)
--------------------
-* Migrate to ROS Lyrical (`#520 <https://github.com/open-rmf/rmf_ros2/issues/520>`_)
-* Resolve compilation warnings (`#514 <https://github.com/open-rmf/rmf_ros2/issues/514>`_)
-  * resolve compilation warnings
-  * more deprecated changes
-  * differentiate deprecated
-  * capture only one variable for cumulative delay
-  * revert string literal
-  ---------
-* Contributors: Aaron Chong, Grey
-
-2.12.0 (2026-02-23)
--------------------
-* Correct early cull of negotiations (`#478 <https://github.com/open-rmf/rmf_ros2/issues/478>`_)
-* Contributors: kj
-
-2.11.1 (2025-07-21)
--------------------
-* Remove deprecated Pose2D message (`#450 <https://github.com/open-rmf/rmf_ros2/issues/450>`_)
-* Contributors: Luca Della Vedova
-
-2.11.0 (2025-06-09)
--------------------
-* Adding mutex parameters to navgraph (`#436 <https://github.com/open-rmf/rmf_ros2/issues/436>`_)
-* Contributors: Jun
-
-2.10.1 (2025-05-13)
--------------------
-
-2.10.0 (2025-05-09)
--------------------
-* Giving options to separate fire alarm by fleet names (`#413 <https://github.com/open-rmf/rmf_ros2/issues/413>`_)
-* Use unique name for exported targets and avoid exporting binary targets (`#396 <https://github.com/open-rmf/rmf_ros2/issues/396>`_)
-* Contributors: Jun, Luca Della Vedova
-
-2.9.0 (2024-11-27)
+2.7.3 (2026-11-23)
 ------------------
-* Adds a simple parking spot management system.  (`#325 <https://github.com/open-rmf/rmf_ros2/issues/325>`_)
-* Contributors: Arjo Chakravarty
+* Set schedule node ID when changes are explicitly requested (`#538 <https://github.com/open-rmf/rmf_ros2/issues/538>`_)
+* Revert "Backport to jazzy (`#546 <https://github.com/open-rmf/rmf_ros2/issues/546>`_)"
+* Backport to jazzy (`#546 <https://github.com/open-rmf/rmf_ros2/issues/546>`_)
+  * Fix cumulative delay calculation in EasyTrafficLight (`#524 <https://github.com/open-rmf/rmf_ros2/issues/524>`_)
+  * Fix EasyTrafficLight publish fleet state (`#525 <https://github.com/open-rmf/rmf_ros2/issues/525>`_)
+  * Fix spelling: occured -> occurred in rmf_websocket exception logs (`#533 <https://github.com/open-rmf/rmf_ros2/issues/533>`_)
+  * Add missing include to unordered_set (`#535 <https://github.com/open-rmf/rmf_ros2/issues/535>`_)
+  * Set schedule node ID when changes are explicitly requested (`#538 <https://github.com/open-rmf/rmf_ros2/issues/538>`_)
+* Contributors: Aaron Chong, Arjo Chakravarty, Grey
 
-2.8.0 (2024-06-12)
+2.7.2 (2024-06-18)
 ------------------
 
 2.7.1 (2024-06-11)

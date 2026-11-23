@@ -55,7 +55,7 @@ void Negotiate::operator()(const Subscriber& s)
         rmf_traffic::agv::Plan::Options(validator)
         .interrupter(interrupter));
 
-      _evaluator.initialize(job);
+      _evaluator.initialize(job->progress());
 
       _queued_jobs.emplace_back(std::move(job));
     }
@@ -80,15 +80,15 @@ void Negotiate::operator()(const Subscriber& s)
 
       if (self->_evaluator.finished_count >= N_jobs || *self->_interrupted)
       {
-        if (self->_evaluator.best_result.planning
-          && self->_evaluator.best_result.planning->progress().success())
+        if (self->_evaluator.best_result.progress
+          && self->_evaluator.best_result.progress->success())
         {
           self->_finished = true;
           // This means we found a successful plan to submit to the negotiation.
           s.on_next(
             Result{
               self->shared_from_this(),
-              [r = self->_evaluator.best_result.planning->progress(),
+              [r = *self->_evaluator.best_result.progress,
               initial_itinerary = std::move(self->_initial_itinerary),
               followed_by = self->_followed_by,
               planner = self->_planner,
@@ -226,7 +226,7 @@ void Negotiate::operator()(const Subscriber& s)
       }
 
       bool resume = false;
-      if (n->_evaluator.evaluate(result.job))
+      if (n->_evaluator.evaluate(result.job->progress()))
       {
         resume = true;
       }
@@ -281,7 +281,7 @@ void Negotiate::operator()(const Subscriber& s)
           for (const auto p : blockers)
             n->_blockers.insert(p);
 
-          if (n->_evaluator.best_result.planning != job)
+          if (n->_evaluator.best_result.progress != &job->progress())
           {
             job->discard();
             const auto job_it = std::find(

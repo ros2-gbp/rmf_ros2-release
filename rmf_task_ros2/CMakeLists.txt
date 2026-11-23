@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.5)
 
 project(rmf_task_ros2)
 
@@ -15,7 +15,6 @@ include(GNUInstallDirs)
 
 find_package(ament_cmake REQUIRED)
 find_package(backward_ros REQUIRED)
-find_package(std_msgs REQUIRED)
 find_package(rmf_api_msgs REQUIRED)
 find_package(rmf_traffic REQUIRED)
 find_package(rmf_traffic_ros2 REQUIRED)
@@ -27,36 +26,33 @@ find_package(nlohmann_json REQUIRED)
 find_package(nlohmann_json_schema_validator_vendor REQUIRED)
 find_package(nlohmann_json_schema_validator REQUIRED)
 
-if(TARGET nlohmann_json_schema_validator)
-  set(json_schema_validator_target nlohmann_json_schema_validator)
-else()
-  set(json_schema_validator_target nlohmann_json_schema_validator::validator)
-endif()
-
 file(GLOB_RECURSE core_lib_srcs "src/rmf_task_ros2/*.cpp")
 add_library(rmf_task_ros2 SHARED ${core_lib_srcs})
 
 target_link_libraries(rmf_task_ros2
   PUBLIC
-    ${std_msgs_TARGETS}
     rmf_api_msgs::rmf_api_msgs
     rmf_traffic::rmf_traffic
     rmf_traffic_ros2::rmf_traffic_ros2
     rmf_websocket::rmf_websocket
-    ${rmf_task_msgs_TARGETS}
-    rclcpp::rclcpp
+    ${rmf_task_msgs_LIBRARIES}
+    ${rclcpp_LIBRARIES}
     nlohmann_json::nlohmann_json
-    ${json_schema_validator_target}
+    nlohmann_json_schema_validator
 )
 
 target_include_directories(rmf_task_ros2
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    ${rmf_traffic_ros2_INCLUDE_DIRS}
+    ${rmf_task_msgs_INCLUDE_DIRS}
+    ${rmf_websocket_INCLUDE_DIRS}
+    ${rclcpp_INCLUDE_DIRS}
 )
 
-ament_export_targets(export_rmf_task_ros2 HAS_LIBRARY_TARGET)
-ament_export_dependencies(std_msgs rmf_traffic rmf_traffic_ros2 rmf_task_msgs rclcpp nlohmann_json nlohmann_json_schema_validator_vendor nlohmann_json_schema_validator rmf_api_msgs rmf_websocket)
+ament_export_targets(rmf_task_ros2 HAS_LIBRARY_TARGET)
+ament_export_dependencies(rmf_traffic rmf_task_msgs rclcpp nlohmann_json nlohmann_json_schema_validator rmf_api_msgs rmf_websocket)
 
 #===============================================================================
 set(TEST_UNCRUSTIFY "Off")
@@ -118,7 +114,7 @@ install(
 
 install(
   TARGETS rmf_task_ros2
-  EXPORT export_rmf_task_ros2
+  EXPORT rmf_task_ros2
   RUNTIME DESTINATION lib/rmf_task_ros2
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib

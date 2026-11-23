@@ -28,8 +28,6 @@ find_package(yaml-cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(LibUUID REQUIRED)
-find_package(rmf_reservation_msgs REQUIRED)
-
 
 # NOTE(MXG): libproj-dev does not currently distribute its cmake config-files
 # in Debian, so we can't use find_package and need to rely on pkg-config.
@@ -39,6 +37,8 @@ pkg_check_modules(PROJ REQUIRED IMPORTED_TARGET proj)
 
 if (rmf_traffic_FOUND)
   message(STATUS "found rmf_traffic")
+  message(STATUS "rmf_traffic_LIBRARIES: ${rmf_traffic_LIBRARIES}")
+  message(STATUS "rmf_traffic_INCLUDE_DIRS: ${rmf_traffic_INCLUDE_DIRS}")
 endif()
 
 # Disable uncrustify tests by default.
@@ -82,6 +82,8 @@ if(BUILD_TESTING)
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+      ${rmf_traffic_msgs_INCLUDE_DIRS}
+      ${rclcpp_INCLUDE_DIRS}
       "src"
   )
   target_link_libraries(missing_query_schedule_node rmf_traffic_ros2)
@@ -93,6 +95,8 @@ if(BUILD_TESTING)
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+      ${rmf_traffic_msgs_INCLUDE_DIRS}
+      ${rclcpp_INCLUDE_DIRS}
       "src"
   )
   target_link_libraries(missing_query_monitor_node rmf_traffic_ros2)
@@ -104,6 +108,8 @@ if(BUILD_TESTING)
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+      ${rmf_traffic_msgs_INCLUDE_DIRS}
+      ${rclcpp_INCLUDE_DIRS}
       "src"
   )
   target_link_libraries(wrong_query_schedule_node rmf_traffic_ros2)
@@ -115,6 +121,8 @@ if(BUILD_TESTING)
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+      ${rmf_traffic_msgs_INCLUDE_DIRS}
+      ${rclcpp_INCLUDE_DIRS}
       "src"
   )
   target_link_libraries(delayed_query_broadcast_monitor_node rmf_traffic_ros2)
@@ -126,6 +134,8 @@ if(BUILD_TESTING)
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+      ${rmf_traffic_msgs_INCLUDE_DIRS}
+      ${rclcpp_INCLUDE_DIRS}
       "src"
   )
   target_link_libraries(missing_participant_schedule_node rmf_traffic_ros2)
@@ -137,6 +147,8 @@ if(BUILD_TESTING)
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+      ${rmf_traffic_msgs_INCLUDE_DIRS}
+      ${rclcpp_INCLUDE_DIRS}
       "src"
   )
   target_link_libraries(changed_participant_schedule_node rmf_traffic_ros2)
@@ -167,11 +179,10 @@ target_link_libraries(rmf_traffic_ros2
   PUBLIC
     rmf_traffic::rmf_traffic
     nlohmann_json::nlohmann_json
-    ${rmf_traffic_msgs_TARGETS}
-    ${rmf_site_map_msgs_TARGETS}
-    ${rmf_building_map_msgs_TARGETS}
-    ${rmf_reservation_msgs_TARGETS}
-    rclcpp::rclcpp
+    ${rmf_traffic_msgs_LIBRARIES}
+    ${rmf_site_map_msgs_LIBRARIES}
+    ${rmf_building_map_msgs_LIBRARIES}
+    ${rclcpp_LIBRARIES}
     yaml-cpp
     ZLIB::ZLIB
     PkgConfig::PROJ
@@ -183,18 +194,21 @@ target_include_directories(rmf_traffic_ros2
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    ${rmf_traffic_msgs_INCLUDE_DIRS}
+    ${rmf_site_map_msgs_INCLUDE_DIRS}
+    ${rmf_building_map_msgs_INCLUDE_DIRS}
+    ${rclcpp_INCLUDE_DIRS}
 )
 
-ament_export_targets(export_rmf_traffic_ros2 HAS_LIBRARY_TARGET)
+ament_export_targets(rmf_traffic_ros2 HAS_LIBRARY_TARGET)
 ament_export_dependencies(
   rclcpp
   rmf_traffic
   rmf_traffic_msgs
   rmf_fleet_msgs
   rmf_site_map_msgs
-  rmf_building_map_msgs
-  rmf_reservation_msgs
   Eigen3
+  rclcpp
   yaml-cpp
   nlohmann_json
   ZLIB
@@ -260,7 +274,7 @@ install(
 install(
   TARGETS
     rmf_traffic_ros2
-  EXPORT export_rmf_traffic_ros2
+  EXPORT rmf_traffic_ros2
   RUNTIME DESTINATION lib/rmf_traffic_ros2
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib

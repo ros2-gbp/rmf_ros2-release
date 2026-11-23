@@ -16,7 +16,7 @@
 */
 
 #include "WaitForCharge.hpp"
-#include "../events/internal_ReservationNodeNegotiator.hpp"
+
 namespace rmf_fleet_adapter {
 namespace phases {
 
@@ -100,7 +100,7 @@ WaitForCharge::Active::Active(
   const auto& graph = _context->navigation_graph();
   retain_mutexes.insert(
     graph.get_waypoint(charging_waypoint).in_mutex_group());
-  _context->retain_mutex_groups(retain_mutexes, "wait for charge");
+  _context->retain_mutex_groups(retain_mutexes);
 
   if (retain_mutexes.begin()->empty())
   {
@@ -117,20 +117,6 @@ WaitForCharge::Active::Active(
       _context->name().c_str(),
       retain_mutexes.begin()->c_str());
   }
-
-_reservation_client = std::move(reservation::ReservationNodeNegotiator::make(
-          _context,
-          std::vector<rmf_traffic::agv::Plan::Goal>{ charging_waypoint},
-          true,
-          [](const rmf_traffic::agv::Plan::Goal& /*goal*/)
-          {
-            // Do Nothing
-          },
-          [](const rmf_traffic::agv::Plan::Goal& /*goal*/)
-          {
-            // Do Nothing
-          }
-      ));
 
   _context->current_mode(rmf_fleet_msgs::msg::RobotMode::MODE_CHARGING);
   _lock_charging = _context->be_charging();
@@ -150,7 +136,7 @@ std::shared_ptr<LegacyTask::ActivePhase> WaitForCharge::Pending::begin()
     "Robot [%s] has begun waiting for its battery to charge to %.1f%%. "
     "Please ensure that the robot is charging.",
     _context->name().c_str(),
-    _charge_to_soc.value_or(0.98) * 100.0);
+    _charge_to_soc.value_or(1.0) * 100.0);
 
   active->_battery_soc_subscription = _context->observe_battery_soc()
     .observe_on(rxcpp::identity_same_worker(_context->worker()))
@@ -166,12 +152,6 @@ std::shared_ptr<LegacyTask::ActivePhase> WaitForCharge::Pending::begin()
       {
         if (*active->_charge_to_soc <= battery_soc)
         {
-          StatusMsg msg;
-          msg.state = msg.STATE_COMPLETED;
-          msg.status = "Reached target battery charge of "
-            + std::to_string(100.0 * *active->_charge_to_soc);
-          active->_status_publisher.get_subscriber().on_next(msg);
-
           active->_status_publisher.get_subscriber().on_completed();
         }
       }

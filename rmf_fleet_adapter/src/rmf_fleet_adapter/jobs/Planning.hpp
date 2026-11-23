@@ -23,8 +23,6 @@
 #include <rmf_traffic/agv/RouteValidator.hpp>
 #include <rmf_traffic/schedule/Snapshot.hpp>
 
-#include <atomic>
-
 namespace rmf_fleet_adapter {
 namespace jobs {
 
@@ -60,9 +58,11 @@ public:
   const rmf_traffic::agv::Planner::Result& progress() const;
 
 private:
-  std::atomic_bool _resume_scheduled = {false};
+  mutable std::mutex _resume_mutex;
   std::function<void()> _resume;
-  std::optional<rmf_traffic::agv::Planner::Result> _current_result;
+  rmf_utils::optional<rmf_traffic::agv::Planner::Result> _current_result;
+
+  std::unique_lock<std::mutex> _lock_resume() const;
 };
 
 } // namespace jobs

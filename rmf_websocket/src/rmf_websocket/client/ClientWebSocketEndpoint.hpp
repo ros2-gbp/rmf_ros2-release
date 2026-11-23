@@ -101,7 +101,7 @@ public:
   ClientWebSocketEndpoint(
     std::string const& uri,
     std::shared_ptr<rclcpp::Node> node,
-    boost::asio::io_context* io_context,
+    boost::asio::io_service* io_service,
     ConnectionCallback cb);
 
   /// Delete move constructor

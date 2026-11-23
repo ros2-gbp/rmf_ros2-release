@@ -330,15 +330,13 @@ void MockAdapter::stop()
 //==============================================================================
 void MockAdapter::dispatch_task(
   std::string task_id,
-  const nlohmann::json& request,
-  bool dry_run)
+  const nlohmann::json& request)
 {
   _pimpl->worker.schedule(
     [
       request,
       task_id = std::move(task_id),
-      fleets = _pimpl->fleets,
-      dry_run = dry_run
+      fleets = _pimpl->fleets
     ](const auto&)
     {
       for (auto& fleet : fleets)
@@ -350,15 +348,14 @@ void MockAdapter::dispatch_task(
         auto bid = rmf_task_msgs::build<rmf_task_msgs::msg::BidNotice>()
         .request(request.dump())
         .task_id(task_id)
-        .time_window(rclcpp::Duration(2, 0))
-        .dry_run(dry_run);
+        .time_window(rclcpp::Duration(2, 0));
 
         fimpl.bid_notice_cb(
           bid,
-          [fimpl = &fimpl, dry_run,
+          [fimpl = &fimpl,
           task_id](const rmf_task_ros2::bidding::Response& response)
           {
-            if (response.proposal.has_value() && !dry_run)
+            if (response.proposal.has_value())
             {
               fimpl->worker.schedule([fimpl, task_id](const auto&)
               {

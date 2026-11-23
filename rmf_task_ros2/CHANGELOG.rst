@@ -2,53 +2,12 @@
 Changelog for package rmf_task_ros2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.15.0 (2026-11-13)
--------------------
-* fix old cmake target for websocket and update other cmake vars (`#580 <https://github.com/open-rmf/rmf_ros2/issues/580>`_)
-* bump cmake version (`#570 <https://github.com/open-rmf/rmf_ros2/issues/570>`_)
-* Fix typos in docs, launch args, log messages and comments (`#568 <https://github.com/open-rmf/rmf_ros2/issues/568>`_)
-  Co-authored-by: Mosiwon <Lots-ninety-nine@users.noreply.github.com>
-* Contributors: Aaron Chong, Mosiwon
-
-2.14.0 (2026-09-26)
--------------------
-* Support both JSON schema validator target names (`#541 <https://github.com/open-rmf/rmf_ros2/issues/541>`_)
-* Contributors: Wolf Vollprecht
-
-2.13.0 (2026-06-15)
--------------------
-
-2.12.0 (2026-02-23)
--------------------
-* Removed /task_summaries publishers from rmf_fleet_adapter (`#487 <https://github.com/open-rmf/rmf_ros2/issues/487>`_)
-* Fix indefinite growth of active_dispatch_states (`#468 <https://github.com/open-rmf/rmf_ros2/issues/468>`_)
-* Contributors: cheriehu, kj
-
-2.11.1 (2025-07-21)
--------------------
-* Remove deprecated Pose2D message (`#450 <https://github.com/open-rmf/rmf_ros2/issues/450>`_)
-* Allow creating Auctioneer with node interfaces to support lifecycle nodes (`#420 <https://github.com/open-rmf/rmf_ros2/issues/420>`_)
-* Contributors: Aaron Chong, Luca Della Vedova
-
-2.11.0 (2025-06-09)
--------------------
-
-2.10.1 (2025-05-13)
--------------------
-
-2.10.0 (2025-05-09)
--------------------
-* Do not update assignments if bid notice is for a dry run (`#401 <https://github.com/open-rmf/rmf_ros2/issues/401>`_)
-* Use unique name for exported targets and avoid exporting binary targets (`#396 <https://github.com/open-rmf/rmf_ros2/issues/396>`_)
-* Contributors: Luca Della Vedova, yadunund
-
-2.9.0 (2024-11-27)
+2.7.3 (2026-11-23)
 ------------------
-* Publish fleet and task updates over ROS 2 if websocket is not provided (`#383 <https://github.com/open-rmf/rmf_ros2/issues/383>`_)
-* Fix incorrect std rounding function used when generating timestamp strings for task ID (`#366 <https://github.com/open-rmf/rmf_ros2/issues/366>`_)
+* Allow creating Auctioneer with node interfaces to support lifecycle nodes (`#420 <https://github.com/open-rmf/rmf_ros2/issues/420>`_)
 * Contributors: Aaron Chong
 
-2.8.0 (2024-06-12)
+2.7.2 (2024-06-18)
 ------------------
 
 2.7.1 (2024-06-11)
