@@ -49,7 +49,7 @@ auto LockMutexGroup::Standby::make(
   standby->_context = std::move(context);
   standby->_state = rmf_task::events::SimpleEventState::make(
     id->assign(),
-    "Lock mutex groups " + data.all_groups_str(),
+    "Lock mutex groups " + standby->_data.all_groups_str(),
     "Waiting for the mutex groups to be locked",
     rmf_task::Event::Status::Standby, {}, standby->_context->clock());
   return standby;
@@ -93,6 +93,11 @@ auto LockMutexGroup::Active::make(
   active->_context = std::move(context);
   active->_state = std::move(state);
   active->_finished = std::move(finished);
+  if (active->_data.hold_wp.has_value())
+  {
+    active->_current_event_waypoint =
+      active->_context->_set_current_event_waypoint(active->_data.hold_wp.value());
+  }
   active->_initialize();
 
   return active;
@@ -156,9 +161,6 @@ LockMutexGroup::Active::Active(Data data)
 void LockMutexGroup::Active::_initialize()
 {
   _state->update_status(State::Status::Underway);
-  using MutexGroupStatesPtr =
-    std::shared_ptr<rmf_fleet_msgs::msg::MutexGroupStates>;
-
   _remaining = _data.mutex_groups;
   for (const auto& [locked, _] : _context->locked_mutex_groups())
   {
