@@ -1,1 +1,1 @@
-{"base": "21b9bcad45f5", "parent": "debian/rolling/rmf_task_ros2", "previous": "5f6271a4ec69", "trim": "", "trimbase": ""}
+{"base": "fa7743fb", "parent": "debian/rolling/rmf_task_ros2", "previous": "d15309e6", "trim": "", "trimbase": ""}
