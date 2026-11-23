@@ -2,6 +2,17 @@
 Changelog for package rmf_reservation_node
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.15.0 (2026-11-13)
+-------------------
+* bump cmake version (`#570 <https://github.com/open-rmf/rmf_ros2/issues/570>`_)
+* Contributors: Aaron Chong
+
+2.14.0 (2026-09-26)
+-------------------
+
+2.13.0 (2026-06-15)
+-------------------
+
 2.12.0 (2026-02-23)
 -------------------
 * Accurate GoToPlace task update and reservation fixes (`#498 <https://github.com/open-rmf/rmf_ros2/issues/498>`_)
